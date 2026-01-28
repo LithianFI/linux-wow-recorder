@@ -1,4 +1,4 @@
-# state_manager.py
+# state_manager.py (updated with duration tracking)
 import time
 from datetime import datetime
 

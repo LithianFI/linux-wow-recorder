@@ -1,4 +1,4 @@
-# combat_parser.py
+# combat_parser.py (updated with minimum duration check)
 import csv
 import io
 import time
@@ -115,14 +115,22 @@ class CombatParser:
             print(f"[ERROR] Failed to find recording file: {e}")
             return None
     
-    def _rename_recording_file(self, boss_name, difficulty_id):
+    def _rename_recording_file(self, boss_name, difficulty_id, recording_duration):
         """Rename the recording file with boss information (called after delay)"""
         try:
             if not self.config.AUTO_RENAME:
                 print(f"[RENAME] Auto-rename disabled in config, skipping")
                 return
+            
+            # Check minimum duration
+            MIN_RECORDING_DURATION = self.config.MIN_RECORDING_DURATION
+            if recording_duration < MIN_RECORDING_DURATION:
+                print(f"[RENAME] Recording too short ({recording_duration}s < {MIN_RECORDING_DURATION}s), skipping rename")
+                # Optionally, we could delete the short recording file here
+                # But for now, we'll just leave it with its original name
+                return
                 
-            print(f"[RENAME] Starting rename process for {boss_name}...")
+            print(f"[RENAME] Starting rename process for {boss_name} (duration: {recording_duration}s)...")
             
             # Wait a moment to ensure OBS has finished writing
             # Use delay from config
@@ -137,6 +145,12 @@ class CombatParser:
             # Verify the file exists and is not still being written
             if not recording_path.exists():
                 print(f"[RENAME] Recording file disappeared: {recording_path}")
+                return
+            
+            # Get file size to check if it's a valid file (not empty or corrupted)
+            file_size = recording_path.stat().st_size
+            if file_size < 1024:  # Less than 1KB is likely corrupted/empty
+                print(f"[RENAME] Recording file too small ({file_size} bytes), likely corrupted, skipping rename")
                 return
             
             # Get file size and wait if it's still changing (OBS might still be writing)
@@ -186,7 +200,7 @@ class CombatParser:
             import traceback
             traceback.print_exc()
     
-    def _start_rename_thread(self, boss_name, difficulty_id):
+    def _start_rename_thread(self, boss_name, difficulty_id, recording_duration):
         """Start a thread to rename the recording file after a delay"""
         if not self.config.AUTO_RENAME:
             print(f"[RENAME] Auto-rename disabled, not renaming {boss_name}")
@@ -194,16 +208,16 @@ class CombatParser:
             
         rename_thread = threading.Thread(
             target=self._rename_recording_file,
-            args=(boss_name, difficulty_id),
+            args=(boss_name, difficulty_id, recording_duration),
             daemon=True
         )
         rename_thread.start()
-        print(f"[RENAME] Started rename thread for {boss_name}")
+        print(f"[RENAME] Started rename thread for {boss_name} (duration: {recording_duration}s)")
     
     def process_line(self, line: str):
         """
         Handles a single combat-log line that is CSV-formatted.
-        Starts on ENCOUNTER_START, stops on ENCOUNTER_END (or UNIT_DIED).
+        Starts on ENCOUNTER_START, stops on ENCOUNTER_END.
         """
         # 1️⃣ Split off the timestamp (everything before the double-space)
         try:
@@ -257,9 +271,10 @@ class CombatParser:
                 # Just log the event without parsing result
                 print(f"[INFO] ENCOUNTER_END detected at {ts_part}")
                     
-                # Get boss info before resetting state
+                # Get boss info and recording duration before resetting state
                 boss_name = self.state.current_boss
                 difficulty_id = self.state.difficulty_id
+                recording_duration = self.state.get_recording_duration()
                 
                 # Run this for 3s extra to properly get the end of the encounter
                 time.sleep(3)
@@ -267,37 +282,17 @@ class CombatParser:
                 # Stop recording
                 try:
                     self.obs_client.stop_recording()
-                    print(f"[INFO] Recording stopped for {boss_name}")
+                    print(f"[INFO] Recording stopped for {boss_name} (duration: {recording_duration}s)")
                     
-                    # Start rename thread after recording stops
+                    # Start rename thread after recording stops (pass duration for validation)
                     if boss_name and difficulty_id:
-                        self._start_rename_thread(boss_name, difficulty_id)
+                        self._start_rename_thread(boss_name, difficulty_id, recording_duration)
+                    else:
+                        print(f"[INFO] No boss info available, not renaming")
                     
                 except Exception as e:
                     print(f"[ERROR] Failed to stop recording: {e}")
                 
                 # Reset state
-                self.state.reset()
-            return
-
-        # Optional safety-net: stop on any creature death
-        if event == "UNIT_DIED":
-            if self.state.recording:
-                print(f"[INFO] UNIT_DIED detected at {ts_part} – stopping")
-                try:
-                    # Get boss info before resetting
-                    boss_name = self.state.current_boss
-                    difficulty_id = self.state.difficulty_id
-                    
-                    self.obs_client.stop_recording()
-                    print(f"[INFO] Recording stopped due to UNIT_DIED")
-                    
-                    # Start rename thread
-                    if boss_name and difficulty_id:
-                        self._start_rename_thread(boss_name, difficulty_id)
-                    
-                except Exception as e:
-                    print(f"[ERROR] Failed to stop recording: {e}")
-                
                 self.state.reset()
             return

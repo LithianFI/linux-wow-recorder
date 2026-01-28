@@ -40,6 +40,7 @@ class ConfigManager:
                 'auto_rename': 'true',
                 'rename_delay': '3',  # seconds
                 'max_rename_attempts': '10',
+                'min_recording_duration': '5',  # Minimum seconds to save a recording
                 # Default OBS recording paths for different OS
                 'recording_path_fallback': self._get_default_recording_path(),
             },
@@ -118,6 +119,8 @@ auto_rename = true
 rename_delay = 3
 # Maximum attempts before giving up on finding the recording file
 max_rename_attempts = 10
+# Minimum seconds to save a recording
+min_recording_duration: 5  
 # Fallback recording path if OBS recording directory cannot be detected
 # Set to empty to always use OBS detected directory
 recording_path_fallback = {recording_path}
@@ -239,6 +242,10 @@ recording_path_fallback = {recording_path}
                 except ValueError:
                     continue
         return overrides
+    
+    @property
+    def MIN_RECORDING_DURATION(self) -> int:
+        return self.config.getint('Recording', 'min_recording_duration', fallback=5)
     
     def set_boss_name_override(self, boss_id: int, name: str):
         """Set a boss name override"""
