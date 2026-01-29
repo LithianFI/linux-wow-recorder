@@ -1,209 +1,300 @@
-# obs_client.py
-import obsws_python as obs
+"""
+OBS WebSocket Client for WoW Raid Recorder.
+Handles communication with OBS Studio for recording control.
+"""
+
 import time
+import obsws_python as obs
+
 
 class OBSClient:
-    def __init__(self, host='localhost', port=4455, password='', timeout=3):
+    """Client for OBS WebSocket communication."""
+    
+    # ---------------------------------------------------------------------
+    # Initialization
+    # ---------------------------------------------------------------------
+    
+    def __init__(self, host: str = 'localhost', port: int = 4455, 
+                 password: str = '', timeout: int = 3):
+        """Initialize OBS client.
+        
+        Args:
+            host: OBS WebSocket host
+            port: OBS WebSocket port
+            password: OBS WebSocket password
+            timeout: Connection timeout in seconds
+        """
         self.host = host
         self.port = port
         self.password = password
         self.timeout = timeout
         self.client = None
+        self._is_connected = False
+    
+    # ---------------------------------------------------------------------
+    # Connection Management
+    # ---------------------------------------------------------------------
+    
+    def connect(self) -> bool:
+        """Establish connection to OBS WebSocket.
         
-    def connect(self):
-        """Establish connection to OBS WebSocket"""
+        Returns:
+            True if connected successfully, False otherwise
+        """
         try:
             self.client = obs.ReqClient(
-                host=self.host, 
-                port=self.port, 
-                password=self.password, 
+                host=self.host,
+                port=self.port,
+                password=self.password,
                 timeout=self.timeout
             )
-            print("[OBS] Connected successfully")
-            return self.client
+            self._is_connected = True
+            print("[OBS] ✅ Connected to OBS WebSocket")
+            return True
+            
         except Exception as e:
-            print(f"[OBS] Failed to connect: {e}")
-            raise
+            print(f"[OBS] ❌ Failed to connect: {e}")
+            self._is_connected = False
+            return False
     
     def disconnect(self):
-        """Disconnect from OBS WebSocket"""
-        if self.client:
+        """Disconnect from OBS WebSocket."""
+        if self.client and self._is_connected:
             try:
                 self.client.disconnect()
-                print("[OBS] Disconnected")
+                print("[OBS] 🔌 Disconnected from OBS")
             except Exception as e:
-                print(f"[OBS] Error during disconnect: {e}")
+                print(f"[OBS] ⚠️ Error during disconnect: {e}")
+            finally:
+                self.client = None
+                self._is_connected = False
     
-    def start_recording(self):
-        """Tell OBS to start a recording"""
-        if not self.client:
-            raise ConnectionError("Not connected to OBS")
+    @property
+    def is_connected(self) -> bool:
+        """Check if client is connected."""
+        return self._is_connected and self.client is not None
+    
+    # ---------------------------------------------------------------------
+    # Recording Control
+    # ---------------------------------------------------------------------
+    
+    def start_recording(self) -> bool:
+        """Start OBS recording.
+        
+        Returns:
+            True if recording started successfully, False otherwise
+        """
+        if not self._ensure_connection():
+            return False
         
         try:
-            # Check if recording is already active
+            # Check if already recording
             status = self.get_recording_status()
-            if status and status.get('output_active', False):
-                print("[OBS] Recording already active")
-                return
+            if status and status.get('is_recording', False):
+                print("[OBS] ⚠️ Recording already active")
+                return True
             
             # Start recording
             self.client.start_record()
-            print("[OBS] Recording started")
+            print("[OBS] ⏺️ Recording started")
             
-            # Wait a moment for recording to initialize
+            # Brief pause to ensure recording initializes
             time.sleep(0.5)
+            return True
             
         except Exception as e:
-            print(f"[OBS] *** FAILED to start recording: {e}")
-            raise
+            print(f"[OBS] ❌ Failed to start recording: {e}")
+            return False
     
-    def stop_recording(self):
-        """Tell OBS to stop the current recording"""
-        if not self.client:
-            raise ConnectionError("Not connected to OBS")
+    def stop_recording(self) -> bool:
+        """Stop OBS recording.
+        
+        Returns:
+            True if recording stopped successfully, False otherwise
+        """
+        if not self._ensure_connection():
+            return False
         
         try:
             # Check if recording is active
             status = self.get_recording_status()
-            if not status or not status.get('output_active', False):
-                print("[OBS] No active recording to stop")
-                return
+            if not status or not status.get('is_recording', False):
+                print("[OBS] ⚠️ No active recording to stop")
+                return True
             
             # Stop recording
             self.client.stop_record()
-            print("[OBS] Recording stopped")
+            print("[OBS] ⏹️ Recording stopped")
             
             # Wait for recording to finalize
             time.sleep(1)
-            
-        except Exception as e:
-            print(f"[OBS] *** FAILED to stop recording: {e}")
-            raise
-    
-    def get_recording_status(self):
-        """Get current recording status and file path"""
-        if not self.client:
-            raise ConnectionError("Not connected to OBS")
-        
-        try:
-            # Get record status
-            response = self.client.get_record_status()
-            
-            # The response is a dataclass with specific attributes
-            # Let's inspect what's available
-            status_dict = {}
-            
-            # Check for common attributes (these may vary by OBS version)
-            if hasattr(response, 'output_active'):
-                status_dict['output_active'] = response.output_active
-            if hasattr(response, 'output_paused'):
-                status_dict['output_paused'] = response.output_paused
-            if hasattr(response, 'output_timecode'):
-                status_dict['output_timecode'] = response.output_timecode
-            if hasattr(response, 'output_duration'):
-                status_dict['output_duration'] = response.output_duration
-            if hasattr(response, 'output_bytes'):
-                status_dict['output_bytes'] = response.output_bytes
-            
-            # For output path, we might need to get it separately
-            try:
-                # Try to get output path from GetRecordDirectory
-                dir_response = self.client.get_record_directory()
-                if hasattr(dir_response, 'record_directory'):
-                    status_dict['record_directory'] = dir_response.record_directory
-            except:
-                pass
-                
-            return status_dict
-            
-        except Exception as e:
-            print(f"[OBS] Failed to get recording status: {e}")
-            return None
-    
-    def get_recording_settings(self):
-        """Get current recording settings"""
-        if not self.client:
-            raise ConnectionError("Not connected to OBS")
-        
-        try:
-            response = self.client.get_record_directory()
-            settings_dict = {}
-            
-            if hasattr(response, 'record_directory'):
-                settings_dict['record_directory'] = response.record_directory
-            
-            # Also get output settings
-            try:
-                output_response = self.client.get_record_directory()
-                if hasattr(output_response, 'record_directory'):
-                    settings_dict['record_directory'] = output_response.record_directory
-            except:
-                pass
-                
-            return settings_dict
-            
-        except Exception as e:
-            print(f"[OBS] Failed to get recording settings: {e}")
-            return None
-        
-    def set_recording_path(self, path: str):
-        """Set OBS recording path (if you want to control it from config)"""
-        if not self.client:
-            raise ConnectionError("Not connected to OBS")
-        
-        try:
-            # Note: Setting recording path might require specific OBS version
-            # and might not be available in all WebSocket APIs
-            self.client.set_record_directory(record_directory=path)
-            print(f"[OBS] Recording path set to: {path}")
             return True
+            
         except Exception as e:
-            print(f"[OBS] Failed to set recording path (may not be supported): {e}")
+            print(f"[OBS] ❌ Failed to stop recording: {e}")
             return False
     
-    def get_last_recording_file(self):
-        """Get the last recording file path (workaround method)"""
-        if not self.client:
-            raise ConnectionError("Not connected to OBS")
+    # ---------------------------------------------------------------------
+    # Recording Status and Information
+    # ---------------------------------------------------------------------
+    
+    def get_recording_status(self) -> dict:
+        """Get current recording status.
+        
+        Returns:
+            Dictionary with recording status information, or None on error
+        """
+        if not self._ensure_connection():
+            return None
         
         try:
-            # Try to get the last recording filename
-            # Note: This might not be available in all OBS versions
-            # We'll use a simpler approach - check the recording directory
+            response = self.client.get_record_status()
+            status = {}
             
-            settings = self.get_recording_settings()
-            if not settings or 'record_directory' not in settings:
-                return None
+            # Extract available attributes
+            attributes = ['output_active', 'output_paused', 'output_timecode',
+                         'output_duration', 'output_bytes']
             
-            record_dir = settings['record_directory']
-            if not record_dir:
-                return None
+            for attr in attributes:
+                if hasattr(response, attr):
+                    status[attr] = getattr(response, attr)
             
-            # List files in recording directory and find the most recent one
-            import os
-            from pathlib import Path
+            # Convert to more intuitive names
+            status['is_recording'] = status.get('output_active', False)
+            status['is_paused'] = status.get('output_paused', False)
+            status['duration'] = status.get('output_duration', 0)
+            status['bytes'] = status.get('output_bytes', 0)
             
-            record_path = Path(record_dir)
+            return status
+            
+        except Exception as e:
+            print(f"[OBS] ⚠️ Failed to get recording status: {e}")
+            return None
+    
+    def get_recording_settings(self) -> dict:
+        """Get recording settings including output directory.
+        
+        Returns:
+            Dictionary with recording settings, or None on error
+        """
+        if not self._ensure_connection():
+            return None
+        
+        try:
+            settings = {}
+            
+            # Get recording directory
+            response = self.client.get_record_directory()
+            if hasattr(response, 'record_directory'):
+                settings['record_directory'] = response.record_directory
+            
+            # Get output settings if available
+            try:
+                output_response = self.client.get_output_settings()
+                if hasattr(output_response, 'output_settings'):
+                    settings.update(output_response.output_settings)
+            except:
+                pass  # Output settings might not be available
+            
+            return settings
+            
+        except Exception as e:
+            print(f"[OBS] ⚠️ Failed to get recording settings: {e}")
+            return None
+    
+    def get_last_recording_info(self) -> dict:
+        """Get information about the last recording.
+        
+        Returns:
+            Dictionary with last recording information
+        """
+        settings = self.get_recording_settings()
+        if not settings or 'record_directory' not in settings:
+            return {}
+        
+        record_dir = settings['record_directory']
+        if not record_dir:
+            return {}
+        
+        return self._find_latest_recording(record_dir)
+    
+    # ---------------------------------------------------------------------
+    # Helper Methods
+    # ---------------------------------------------------------------------
+    
+    def _ensure_connection(self) -> bool:
+        """Ensure client is connected to OBS.
+        
+        Returns:
+            True if connected, False otherwise
+        """
+        if self.is_connected:
+            return True
+        
+        print("[OBS] 🔌 Not connected to OBS, attempting to reconnect...")
+        return self.connect()
+    
+    def _find_latest_recording(self, directory: str) -> dict:
+        """Find the most recent recording file in a directory.
+        
+        Args:
+            directory: Path to search for recordings
+            
+        Returns:
+            Dictionary with file information or empty dict if none found
+        """
+        from pathlib import Path
+        
+        try:
+            record_path = Path(directory)
             if not record_path.exists():
-                return None
+                return {}
             
-            # Look for video files (common extensions)
-            video_extensions = {'.mp4', '.mkv', '.flv', '.mov', '.ts', '.m3u8'}
+            # Common video file extensions
+            video_extensions = {'.mp4', '.mkv', '.flv', '.mov', '.ts', 
+                               '.m3u8', '.avi', '.wmv'}
+            
+            # Find all video files
             video_files = []
-            
             for file in record_path.iterdir():
                 if file.suffix.lower() in video_extensions and file.is_file():
                     video_files.append(file)
             
             if not video_files:
-                return None
+                return {}
             
-            # Return the most recently modified file
+            # Get the most recently modified file
             latest_file = max(video_files, key=lambda f: f.stat().st_mtime)
-            return str(latest_file)
+            
+            return {
+                'path': str(latest_file),
+                'name': latest_file.name,
+                'size': latest_file.stat().st_size,
+                'modified': latest_file.stat().st_mtime
+            }
             
         except Exception as e:
-            print(f"[OBS] Failed to get last recording file: {e}")
-            return None
-        
+            print(f"[OBS] ⚠️ Error finding recordings: {e}")
+            return {}
     
+    # ---------------------------------------------------------------------
+    # Context Manager Support
+    # ---------------------------------------------------------------------
+    
+    def __enter__(self):
+        """Context manager entry."""
+        self.connect()
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit."""
+        self.disconnect()
+    
+    # ---------------------------------------------------------------------
+    # String Representation
+    # ---------------------------------------------------------------------
+    
+    def __str__(self) -> str:
+        """String representation of OBS client."""
+        status = "Connected" if self.is_connected else "Disconnected"
+        return f"OBSClient(host={self.host}:{self.port}, status={status})"
