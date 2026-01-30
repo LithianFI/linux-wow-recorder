@@ -249,11 +249,16 @@ class LogMonitor:
     
     def get_status(self) -> dict:
         """Get current monitoring status."""
+        current_log = None
+        is_tailing = False
+        if self.handler:
+            current_log = str(self.handler.current_log) if self.handler.current_log else None
+            is_tailing = self.handler.tailer.is_alive() if self.handler.tailer else False
         return {
             'directory': str(self.log_dir),
             'is_monitoring': self.is_monitoring(),
-            'current_log': str(self.handler.current_log) if self.handler.current_log else None,
-            'is_tailing': self.handler.tailer.is_alive() if self.handler.tailer else False,
+            'current_log': current_log,
+            'is_tailing': is_tailing,
         }
 
 

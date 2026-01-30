@@ -348,11 +348,13 @@ def status_broadcast_loop():
         try:
             status = build_status()
 
+            recorder = status.get('recorder') or {}
+            log_mon = status.get('log_monitor') or {}
             status_key = (
-                status['recorder'].get('recording'),
-                status['recorder'].get('encounter_active'),
-                status['recorder'].get('boss_name'),
-                status['log_monitor'].get('current_log'),
+                recorder.get('recording'),
+                recorder.get('encounter_active'),
+                recorder.get('boss_name'),
+                log_mon.get('current_log'),
                 status.get('obs_connected'),
             )
 
@@ -405,9 +407,6 @@ def init_recorder(config_path: Path) -> bool:
     try:
         config_manager = ConfigManager(config_path)
 
-        if not config_manager.LOG_DIR.exists():
-            print(f"[RECORDER] Warning: Log directory does not exist: {config_manager.LOG_DIR}")
-
         print("[RECORDER] Connecting to OBS...")
         obs_client = OBSClient(
             host=config_manager.OBS_HOST,
@@ -433,7 +432,11 @@ def init_recorder(config_path: Path) -> bool:
             log_monitor.start()
             print(f"[RECORDER] Monitoring: {config_manager.LOG_DIR}")
         else:
-            print(f"[RECORDER] Log directory not found, monitoring disabled")
+            print(f"")
+            print(f"⚠️  [RECORDER] LOG DIRECTORY NOT FOUND")
+            print(f"   Path: {config_manager.LOG_DIR}")
+            print(f"   Please update 'log_dir' in your config.ini")
+            print(f"")
 
         recorder_running = True
         return True
