@@ -360,20 +360,24 @@ class RecordingProcessor:
 
 class CombatParser:
     """Main parser that coordinates combat log parsing and recording actions."""
-    
+
     def __init__(self, obs_client: OBSClient, state_manager: RecordingState,
                  config_manager: ConfigManager):
         self.obs = obs_client
         self.state = state_manager
         self.config = config_manager
-        
+
         # Initialize components
         self.file_manager = RecordingFileManager(config_manager, obs_client)
         self.processor = RecordingProcessor(obs_client, self.file_manager, config_manager)
-        
+
         # Thread management
         self._active_threads: List[threading.Thread] = []
         self._cleanup_completed_threads()
+
+        # Event callbacks for frontend
+        self.on_event: Optional[callable] = None
+        self.on_recording_saved: Optional[callable] = None
     
     def process_line(self, line: str):
         """Process a single combat log line."""
@@ -419,7 +423,16 @@ class CombatParser:
         )
         thread.start()
         self._active_threads.append(thread)
-        
+
+        # Emit event for frontend
+        if self.on_event:
+            self.on_event({
+                'type': 'ENCOUNTER_START',
+                'timestamp': boss_info.timestamp,
+                'boss_name': boss_info.name,
+                'difficulty_id': boss_info.difficulty_id,
+            })
+
         print(f"[PARSER] Started encounter: {boss_info.name}")
     
     def _handle_encounter_end(self, event: CombatEvent):
@@ -427,12 +440,21 @@ class CombatParser:
         # Only process if we're in an active encounter
         if not self.state.encounter_active:
             return
-        
+
         # Get boss info and recording duration
         boss_name = self.state.boss_name
         difficulty_id = self.state.difficulty_id
-        recording_duration = self.state.get_recording_duration()
-        
+        encounter_duration = self.state.get_encounter_duration()
+
+        # Check kill/wipe status from event fields
+        # ENCOUNTER_END format: encounterID, encounterName, difficultyID, groupSize, success
+        is_kill = False
+        try:
+            if len(event.fields) >= 6:
+                is_kill = event.fields[5] == "1"
+        except (IndexError, ValueError):
+            pass
+
         # Create boss info for processing
         boss_info = BossInfo(
             boss_id=self.state.boss_id or 0,
@@ -441,22 +463,33 @@ class CombatParser:
             instance_id=self.state.instance_id or 0,
             timestamp=event.timestamp
         )
-        
+
+        # Emit event for frontend
+        if self.on_event:
+            self.on_event({
+                'type': 'ENCOUNTER_END',
+                'timestamp': event.timestamp,
+                'boss_name': boss_name,
+                'difficulty_id': difficulty_id,
+                'duration': round(encounter_duration, 1),
+                'is_kill': is_kill,
+            })
+
         # Wait for encounter to fully end
         time.sleep(3)
-        
+
         # Process encounter end in background thread
         thread = threading.Thread(
             target=self._process_encounter_end_thread,
-            args=(boss_info, recording_duration),
+            args=(boss_info, encounter_duration),
             daemon=True
         )
         thread.start()
         self._active_threads.append(thread)
-        
+
         # Reset state
         self.state.reset()
-        
+
         print(f"[PARSER] Ended encounter: {boss_info.name}")
     
     def _process_encounter_start_thread(self, boss_info: BossInfo):
@@ -468,6 +501,10 @@ class CombatParser:
     def _process_encounter_end_thread(self, boss_info: BossInfo, duration: float):
         """Thread function for ending encounter recording."""
         self.processor.process_encounter_end(boss_info, duration)
+
+        # Notify frontend that recording was saved/processed
+        if self.on_recording_saved:
+            self.on_recording_saved()
     
     def _cleanup_completed_threads(self):
         """Remove completed threads from active list."""

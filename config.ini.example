@@ -1,11 +1,6 @@
-# WoW Raid Recorder Configuration
-# ================================
-# Important: Do NOT use % signs in this file unless they are part of a path
-# Paths with spaces do not need quotes
-
 [General]
 # Path to your WoW logs directory
-log_dir = /home/lithian/Games/World of Warcraft/_retail_/Logs
+log_dir = /path/to/World of Warcraft/_retail_/Logs
 # Pattern to match combat log files
 log_pattern = WoWCombatLog-\d{6}_\d{6}\.txt$
 # Extension for recording files (must match OBS settings)
@@ -16,7 +11,7 @@ recording_extension = .mp4
 # Leave password empty if no password is set in OBS
 host = localhost
 port = 4455
-password = 
+password =
 
 [Recording]
 # Automatically rename recordings based on boss encounters
@@ -25,9 +20,21 @@ auto_rename = true
 rename_delay = 3
 # Maximum attempts before giving up on finding the recording file
 max_rename_attempts = 10
+# Minimum recording duration in seconds (shorter recordings are ignored/deleted)
+min_recording_duration = 5
+# Delete recordings shorter than min_recording_duration
+delete_short_recordings = true
 # Fallback recording path if OBS recording directory cannot be detected
-# Set to empty to always use OBS detected directory
-recording_path_fallback = /home/lithian/Videos
+recording_path_fallback = /path/to/Videos
+
+[Difficulties]
+# Which raid difficulties to record
+# Set to true to record, false to ignore
+record_lfr = false
+record_normal = true
+record_heroic = true
+record_mythic = true
+record_other = false
 
 [BossNames]
 # Boss ID to name overrides (optional)
@@ -35,12 +42,3 @@ recording_path_fallback = /home/lithian/Videos
 # Example:
 # 2688 = Rashok
 # 2687 = The Vigilant Steward, Zskarn
-
-[Difficulties]
-# Which raid difficulties to record
-# Set to true to record, false to ignore
-record_lfr = false      
-record_normal = true    
-record_heroic = true     
-record_mythic = true    
-record_other = false    
