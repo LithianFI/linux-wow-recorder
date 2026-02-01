@@ -36,6 +36,26 @@ class BossInfo:
         cleaned = cleaned.replace("'", "")
         cleaned = cleaned.replace(",", "")
         return cleaned.strip()
+    
+@dataclass 
+class DungeonInfo:
+    """Information about a Mythic+ dungeon run."""
+    dungeon_id: int
+    name: str
+    dungeon_level: int
+    timestamp: str = ""
+    
+    @property
+    def formatted_name(self) -> str:
+        """Get dungeon name formatted for filename."""
+        # Remove special characters and replace spaces
+        cleaned = re.sub(r'[<>:"/\\|?*]', '', self.name)
+        cleaned = cleaned.replace(" ", "_")
+        cleaned = cleaned.replace("'", "")
+        cleaned = cleaned.replace(",", "")
+        cleaned = cleaned.replace(":", "")
+        cleaned = cleaned.replace("-", "_")
+        return cleaned.strip()
 
 
 class CombatEvent:
@@ -50,20 +70,53 @@ class CombatEvent:
     
     def _parse_line(self):
         """Parse the raw log line into components."""
+        line = self.raw_line.strip()
+        if not line:
+            return
+        
         try:
-            # Split timestamp (before double space) from CSV data
-            ts_part, rest = self.raw_line.split("  ", 1)
-            self.timestamp = ts_part.strip()
-            
-            # Parse CSV fields
-            csv_reader = csv.reader(io.StringIO(rest))
-            self.fields = next(csv_reader)
-            if self.fields:
-                self.event_type = self.fields[0].strip().upper()
+            # Find the first double space to separate timestamp from data
+            if "  " in line:
+                ts_end = line.find("  ")
+                self.timestamp = line[:ts_end].strip()
+                data = line[ts_end + 2:].strip()
+            else:
+                # Fallback: split on first space after time
+                first_space = line.find(" ")
+                if first_space == -1:
+                    return
                 
-        except (ValueError, StopIteration):
-            # Not a valid combat log line format
-            pass
+                second_space = line.find(" ", first_space + 1)
+                if second_space == -1:
+                    return
+                
+                self.timestamp = line[:second_space].strip()
+                data = line[second_space + 1:].strip()
+            
+            # Parse CSV data with proper quote handling
+            csv_reader = csv.reader(io.StringIO(data), quotechar='"', delimiter=',')
+            
+            try:
+                row = next(csv_reader)
+                # Clean up fields
+                self.fields = []
+                for field in row:
+                    field = field.strip()
+                    # Remove surrounding quotes if present
+                    if field.startswith('"') and field.endswith('"'):
+                        field = field[1:-1]
+                    self.fields.append(field)
+                
+                if self.fields:
+                    self.event_type = self.fields[0].upper()
+                    
+            except StopIteration:
+                pass
+                
+        except Exception as e:
+            if "ENCOUNTER" in line or "CHALLENGE_MODE" in line:
+                print(f"[PARSER] Parse error: {e}")
+                print(f"[PARSER] Line: {line[:100]}...")
     
     @property
     def is_encounter_start(self) -> bool:
@@ -74,6 +127,21 @@ class CombatEvent:
     def is_encounter_end(self) -> bool:
         """Check if this is an ENCOUNTER_END event."""
         return self.event_type == "ENCOUNTER_END"
+    
+    @property
+    def is_dungeon_start(self) -> bool:
+        """Check if this is a CHALLENGE_MODE_START event."""
+        return self.event_type == "CHALLENGE_MODE_START"
+    
+    @property
+    def is_dungeon_end(self) -> bool:
+        """Check if this is a CHALLENGE_MODE_END event."""
+        return self.event_type == "CHALLENGE_MODE_END"
+    
+    @property
+    def is_zone_change(self) -> bool:
+        """Check if this is a ZONE_CHANGE event."""
+        return self.event_type == "ZONE_CHANGE"
     
     def get_boss_info(self) -> Optional[BossInfo]:
         """Extract boss information from ENCOUNTER_START event."""
@@ -91,12 +159,45 @@ class CombatEvent:
         except (ValueError, IndexError):
             return None
     
+    def get_dungeon_info(self) -> Optional[DungeonInfo]:
+        """Extract dungeon information from CHALLENGE_MODE_START event."""
+        if not self.is_dungeon_start:
+            return None
+        
+        print(f"[PARSER] Parsing dungeon start with {len(self.fields)} fields: {self.fields}")
+        
+        if len(self.fields) < 5:
+            print(f"[PARSER] Not enough fields for dungeon: {self.fields}")
+            return None
+        
+        try:
+            # CHALLENGE_MODE_START,"Tazavesh, the Veiled Market",2441,391,14,[10,9,147]
+            # Fields: [0]=CHALLENGE_MODE_START, [1]=zoneName, [2]=instanceID, [3]=challengeModeID, [4]=keystoneLevel
+            
+            dungeon_name = self.fields[1]
+            instance_id = int(self.fields[2])
+            keystone_level = int(self.fields[4])
+            
+            print(f"[PARSER] Parsed dungeon: {dungeon_name} (ID: {instance_id}) +{keystone_level}")
+            
+            return DungeonInfo(
+                dungeon_id=instance_id,
+                name=dungeon_name,
+                dungeon_level=keystone_level,
+                timestamp=self.timestamp
+            )
+            
+        except (ValueError, IndexError) as e:
+            print(f"[PARSER] Error parsing dungeon info: {e}")
+            print(f"[PARSER] Fields were: {self.fields}")
+            return None
+    
     def is_valid(self) -> bool:
         """Check if this is a valid parsable event."""
-        return bool(self.event_type)
+        return bool(self.event_type) and len(self.fields) > 0
     
     def __str__(self) -> str:
-        return f"CombatEvent({self.event_type} at {self.timestamp})"
+        return f"CombatEvent({self.event_type} at {self.timestamp[:19]})"
 
 
 class RecordingFileManager:
@@ -183,31 +284,68 @@ class RecordingFileManager:
             print(f"[FILE] Error validating file stability: {e}")
             return False
     
-    def generate_filename(self, boss_info: BossInfo, file_time: datetime) -> str:
-        """Generate a filename for a recording based on boss info."""
-        # Get difficulty name
-        difficulty_name = self._get_difficulty_name(boss_info.difficulty_id)
+    def generate_filename(self, boss_info: BossInfo = None, dungeon_info: DungeonInfo = None, 
+                         file_time: datetime = None) -> str:
+        """Generate a filename for a recording based on encounter info."""
+        # Determine if this is a boss or dungeon
+        if boss_info:
+            # Get difficulty name
+            difficulty_name = self._get_difficulty_name(boss_info.difficulty_id)
+            
+            # Format timestamp
+            if not file_time:
+                file_time = datetime.now()
+            date_str = file_time.strftime("%Y-%m-%d")
+            time_str = file_time.strftime("%H-%M-%S")
+            
+            # Create filename
+            filename = f"{date_str}_{time_str}_{boss_info.formatted_name}_{difficulty_name}"
         
-        # Format timestamp
-        date_str = file_time.strftime("%Y-%m-%d")
-        time_str = file_time.strftime("%H-%M-%S")
+        elif dungeon_info:
+            # Format timestamp
+            if not file_time:
+                file_time = datetime.now()
+            date_str = file_time.strftime("%Y-%m-%d")
+            time_str = file_time.strftime("%H-%M-%S")
+            
+            # Create M+ filename
+            filename = f"{date_str}_{time_str}_{dungeon_info.formatted_name}_M+{dungeon_info.dungeon_level}"
         
-        # Create filename
-        filename = f"{date_str}_{time_str}_{boss_info.formatted_name}_{difficulty_name}"
+        else:
+            # Fallback generic name
+            if not file_time:
+                file_time = datetime.now()
+            date_str = file_time.strftime("%Y-%m-%d")
+            time_str = file_time.strftime("%H-%M-%S")
+            filename = f"{date_str}_{time_str}_Recording"
+        
         filename += self.config.RECORDING_EXTENSION
         
         return filename
     
-    def rename_recording(self, recording_path: Path, boss_info: BossInfo) -> Optional[Path]:
-        """Rename a recording file with boss information."""
+    def rename_recording(self, recording_path: Path, boss_info: BossInfo = None, 
+                        dungeon_info: DungeonInfo = None) -> Optional[Path]:
+        """Rename a recording file with encounter information."""
         try:
             # Generate new filename
             file_time = datetime.fromtimestamp(recording_path.stat().st_mtime)
-            new_filename = self.generate_filename(boss_info, file_time)
+            
+            if boss_info:
+                new_filename = self.generate_filename(boss_info=boss_info, file_time=file_time)
+            elif dungeon_info:
+                new_filename = self.generate_filename(dungeon_info=dungeon_info, file_time=file_time)
+            else:
+                new_filename = self.generate_filename(file_time=file_time)
+            
             new_path = recording_path.parent / new_filename
             
             # Handle duplicates
-            new_path = self._handle_duplicate_filename(new_path, boss_info, file_time)
+            if boss_info:
+                new_path = self._handle_duplicate_filename(new_path, boss_info, file_time)
+            elif dungeon_info:
+                new_path = self._handle_duplicate_dungeon_filename(new_path, dungeon_info, file_time)
+            else:
+                new_path = self._handle_duplicate_generic_filename(new_path, file_time)
             
             # Perform rename
             recording_path.rename(new_path)
@@ -269,7 +407,49 @@ class RecordingFileManager:
                 timestamp=boss_info.timestamp
             )
             
-            new_filename = self.generate_filename(boss_info_copy, file_time)
+            new_filename = self.generate_filename(boss_info=boss_info_copy, file_time=file_time)
+            path = original_path.parent / new_filename
+            counter += 1
+        
+        if path.exists():
+            print(f"[FILE] Max rename attempts reached, keeping: {original_path.name}")
+            return original_path
+        
+        return path
+    
+    def _handle_duplicate_dungeon_filename(self, path: Path, dungeon_info: DungeonInfo,
+                                         file_time: datetime) -> Path:
+        """Handle duplicate dungeon filenames by adding attempt counters."""
+        counter = 1
+        original_path = path
+        
+        while path.exists() and counter <= self.config.MAX_RENAME_ATTEMPTS:
+            # Create dungeon name with attempt counter
+            dungeon_with_counter = f"{dungeon_info.name}_attempt{counter}"
+            dungeon_info_copy = DungeonInfo(
+                dungeon_id=dungeon_info.dungeon_id,
+                name=dungeon_with_counter,
+                dungeon_level=dungeon_info.dungeon_level,
+                timestamp=dungeon_info.timestamp
+            )
+            
+            new_filename = self.generate_filename(dungeon_info=dungeon_info_copy, file_time=file_time)
+            path = original_path.parent / new_filename
+            counter += 1
+        
+        if path.exists():
+            print(f"[FILE] Max rename attempts reached, keeping: {original_path.name}")
+            return original_path
+        
+        return path
+    
+    def _handle_duplicate_generic_filename(self, path: Path, file_time: datetime) -> Path:
+        """Handle duplicate generic filenames."""
+        counter = 1
+        original_path = path
+        
+        while path.exists() and counter <= self.config.MAX_RENAME_ATTEMPTS:
+            new_filename = f"{file_time.strftime('%Y-%m-%d_%H-%M-%S')}_Recording_{counter}{self.config.RECORDING_EXTENSION}"
             path = original_path.parent / new_filename
             counter += 1
         
@@ -306,11 +486,28 @@ class RecordingProcessor:
         
         return True
     
+    def process_dungeon_start(self, dungeon_info: DungeonInfo) -> bool:
+        """Start recording for a Mythic+ dungeon."""
+        # Check if M+ is enabled
+        if not self.config.RECORD_MPLUS:
+            print(f"[PROC] Skipping M+ dungeon - not enabled in config")
+            return False
+        
+        print(f"[PROC] Starting recording for: {dungeon_info.name} (+{dungeon_info.dungeon_level})")
+        
+        # Start OBS recording
+        if not self.obs.start_recording():
+            print("[PROC] Failed to start OBS recording")
+            return False
+        
+        return True
+    
     def process_encounter_end(self, boss_info: BossInfo, recording_duration: float) -> bool:
         """Stop recording and handle the recording file."""
         if not self.config.is_difficulty_enabled(boss_info.difficulty_id):
             diff_name = self.file_manager._get_difficulty_name(boss_info.difficulty_id)
             return False
+        
         print(f"[PROC] Stopping recording for: {boss_info.name}")
         
         # Stop OBS recording
@@ -322,14 +519,34 @@ class RecordingProcessor:
         time.sleep(self.config.RENAME_DELAY)
         
         # Process the recording
-        return self._process_recording_file(boss_info, recording_duration)
+        return self._process_recording_file(boss_info=boss_info, recording_duration=recording_duration)
     
-    def _process_recording_file(self, boss_info: BossInfo, duration: float) -> bool:
+    def process_dungeon_end(self, dungeon_info: DungeonInfo = None, recording_duration: float = 0, 
+                           reason: str = "") -> bool:
+        """Stop recording and handle the recording file for dungeon."""
+        if not self.config.RECORD_MPLUS:
+            return False
+        
+        print(f"[PROC] Stopping dungeon recording{f' ({reason})' if reason else ''}")
+        
+        # Stop OBS recording
+        if not self.obs.stop_recording():
+            print("[PROC] Failed to stop OBS recording")
+            return False
+        
+        # Wait before file operations
+        time.sleep(self.config.RENAME_DELAY)
+        
+        # Process the recording
+        return self._process_recording_file(dungeon_info=dungeon_info, recording_duration=recording_duration)
+    
+    def _process_recording_file(self, boss_info: BossInfo = None, dungeon_info: DungeonInfo = None,
+                               recording_duration: float = 0) -> bool:
         """Process the recording file (rename or delete)."""
         # Check minimum duration
-        if duration < self.config.MIN_RECORDING_DURATION:
-            print(f"[PROC] Recording too short ({duration:.1f}s), will delete")
-            return self._handle_short_recording(duration)
+        if recording_duration < self.config.MIN_RECORDING_DURATION:
+            print(f"[PROC] Recording too short ({recording_duration:.1f}s), will delete")
+            return self._handle_short_recording(recording_duration)
         
         # Get the recording file
         recording_path = self.file_manager.find_latest_recording()
@@ -343,7 +560,13 @@ class RecordingProcessor:
             return False
         
         # Rename the file
-        new_path = self.file_manager.rename_recording(recording_path, boss_info)
+        if boss_info:
+            new_path = self.file_manager.rename_recording(recording_path, boss_info=boss_info)
+        elif dungeon_info:
+            new_path = self.file_manager.rename_recording(recording_path, dungeon_info=dungeon_info)
+        else:
+            new_path = self.file_manager.rename_recording(recording_path)
+        
         return new_path is not None
     
     def _handle_short_recording(self, duration: float) -> bool:
@@ -381,6 +604,11 @@ class CombatParser:
         # Event callbacks for frontend
         self.on_event: Optional[callable] = None
         self.on_recording_saved: Optional[callable] = None
+        
+        # Dungeon timeout monitoring
+        self._dungeon_monitor_thread = None
+        self._dungeon_monitor_running = False
+        self._start_dungeon_monitor()
     
     def process_line(self, line: str):
         """Process a single combat log line."""
@@ -389,15 +617,155 @@ class CombatParser:
         if not event.is_valid():
             return
         
-        # Handle the event
-        if event.is_encounter_start:
+        # Update activity timestamp for dungeon idle detection
+        if self.state.dungeon_active:
+            self.state.update_activity()
+        
+        # Handle the event - prioritize dungeons over encounters
+        if event.is_dungeon_start:
+            self._handle_dungeon_start(event)
+        elif event.is_dungeon_end:
+            self._handle_dungeon_end(event, "dungeon_complete")
+        elif event.is_zone_change:
+            self._handle_zone_change(event)
+        elif event.is_encounter_start:
             self._handle_encounter_start(event)
         elif event.is_encounter_end:
             self._handle_encounter_end(event)
     
+    def _handle_dungeon_start(self, event: CombatEvent):
+        """Handle CHALLENGE_MODE_START event."""
+        # Don't start if already recording a dungeon
+        if self.state.dungeon_active:
+            return
+        
+        # Extract dungeon information
+        dungeon_info = event.get_dungeon_info()
+        if not dungeon_info:
+            print(f"[PARSER] Could not parse dungeon info from: {event}")
+            return
+        
+        # Start the dungeon in state
+        self.state.start_dungeon(
+            dungeon_info.dungeon_id,
+            dungeon_info.name,
+            dungeon_info.dungeon_level,
+            dungeon_info.timestamp
+        )
+        
+        # Start recording in background thread
+        thread = threading.Thread(
+            target=self._process_dungeon_start_thread,
+            args=(dungeon_info,),
+            daemon=True
+        )
+        thread.start()
+        self._active_threads.append(thread)
+
+        # Emit event for frontend
+        if self.on_event:
+            self.on_event({
+                'type': 'DUNGEON_START',
+                'timestamp': dungeon_info.timestamp,
+                'dungeon_name': dungeon_info.name,
+                'dungeon_level': dungeon_info.dungeon_level,
+                'dungeon_id': dungeon_info.dungeon_id,
+            })
+
+        print(f"[PARSER] Started M+ dungeon: {dungeon_info.name} (+{dungeon_info.dungeon_level})")
+    
+    def _handle_dungeon_end(self, event: CombatEvent, reason: str = "dungeon_complete"):
+        """Handle CHALLENGE_MODE_END event."""
+        # Only process if we're in an active dungeon
+        if not self.state.dungeon_active:
+            return
+
+        # Get dungeon info and recording duration
+        dungeon_name = self.state.dungeon_name
+        dungeon_level = self.state.dungeon_level
+        dungeon_duration = self.state.get_encounter_duration()
+
+        # Check success status from event fields
+        # CHALLENGE_MODE_END format: instanceID, zoneName, challengeModeID, success
+        is_success = False
+        try:
+            if len(event.fields) >= 5:
+                is_success = event.fields[4] == "1"
+        except (IndexError, ValueError):
+            pass
+
+        # Create dungeon info for processing
+        dungeon_info = DungeonInfo(
+            dungeon_id=self.state.dungeon_id or 0,
+            name=dungeon_name or "Unknown Dungeon",
+            dungeon_level=dungeon_level or 0,
+            timestamp=event.timestamp
+        )
+
+        # Emit event for frontend
+        if self.on_event:
+            self.on_event({
+                'type': 'DUNGEON_END',
+                'timestamp': event.timestamp,
+                'dungeon_name': dungeon_name,
+                'dungeon_level': dungeon_level,
+                'duration': round(dungeon_duration, 1),
+                'is_success': is_success,
+                'reason': reason,
+            })
+
+        # Wait a moment before processing
+        time.sleep(3)
+
+        # Process dungeon end in background thread
+        thread = threading.Thread(
+            target=self._process_dungeon_end_thread,
+            args=(dungeon_info, dungeon_duration, reason),
+            daemon=True
+        )
+        thread.start()
+        self._active_threads.append(thread)
+
+        # Reset state
+        self.state.reset()
+
+        print(f"[PARSER] Ended M+ dungeon: {dungeon_info.name} ({reason})")
+    
+    def _handle_zone_change(self, event: CombatEvent):
+        """Handle ZONE_CHANGE event during dungeon runs."""
+        # Only process if we're in an active dungeon
+        if not self.state.dungeon_active:
+            return
+        
+        print(f"[PARSER] Zone change detected during dungeon run")
+        
+        # Check if we changed to a different instance (likely left dungeon)
+        try:
+            # ZONE_CHANGE format: uiMapID, zoneName
+            # If zoneName changes significantly, assume dungeon ended
+            if len(event.fields) >= 3:
+                new_zone = event.fields[2]
+                current_dungeon = self.state.dungeon_name
+                
+                # Simple check: if zone doesn't contain dungeon name (case-insensitive)
+                if current_dungeon and current_dungeon.lower() not in new_zone.lower():
+                    print(f"[PARSER] Zone changed from dungeon to: {new_zone}")
+                    self._handle_dungeon_end(event, "zone_change")
+        except (IndexError, ValueError):
+            pass
+    
+    def _handle_dungeon_timeout(self):
+        """Handle dungeon timeout due to inactivity."""
+        if not self.state.dungeon_active:
+            return
+        
+        # Create a synthetic event for timeout
+        synthetic_event = CombatEvent(f"{datetime.now().strftime('%H:%M:%S')}  CHALLENGE_MODE_END,{self.state.dungeon_id},{self.state.dungeon_name},0,0")
+        self._handle_dungeon_end(synthetic_event, "timeout")
+    
     def _handle_encounter_start(self, event: CombatEvent):
         """Handle ENCOUNTER_START event."""
-        # Don't start if already recording
+        # Don't start if already recording (either encounter or dungeon)
         if self.state.is_recording:
             return
         
@@ -495,6 +863,45 @@ class CombatParser:
 
         print(f"[PARSER] Ended encounter: {boss_info.name}")
     
+    def _start_dungeon_monitor(self):
+        """Start dungeon timeout monitoring thread."""
+        self._dungeon_monitor_running = True
+        self._dungeon_monitor_thread = threading.Thread(
+            target=self._dungeon_monitor_loop,
+            daemon=True
+        )
+        self._dungeon_monitor_thread.start()
+        print("[PARSER] Started dungeon timeout monitor")
+    
+    def _dungeon_monitor_loop(self):
+        """Monitor dungeon for inactivity timeout."""
+        while self._dungeon_monitor_running:
+            try:
+                if self.state.dungeon_active:
+                    timeout = self.config.DUNGEON_TIMEOUT_SECONDS
+                    if self.state.is_dungeon_idle(timeout):
+                        print(f"[PARSER] Dungeon idle for {timeout}s, triggering timeout")
+                        self._handle_dungeon_timeout()
+                
+                time.sleep(5)  # Check every 5 seconds
+            except Exception as e:
+                print(f"[PARSER] Error in dungeon monitor: {e}")
+                time.sleep(5)
+    
+    def _process_dungeon_start_thread(self, dungeon_info: DungeonInfo):
+        """Thread function for starting dungeon recording."""
+        success = self.processor.process_dungeon_start(dungeon_info)
+        if success:
+            self.state.start_recording()
+    
+    def _process_dungeon_end_thread(self, dungeon_info: DungeonInfo, duration: float, reason: str):
+        """Thread function for ending dungeon recording."""
+        self.processor.process_dungeon_end(dungeon_info, duration, reason)
+
+        # Notify frontend that recording was saved/processed
+        if self.on_recording_saved:
+            self.on_recording_saved()
+    
     def _process_encounter_start_thread(self, boss_info: BossInfo):
         """Thread function for starting encounter recording."""
         success = self.processor.process_encounter_start(boss_info)
@@ -516,6 +923,11 @@ class CombatParser:
     def shutdown(self):
         """Clean shutdown of the parser."""
         print("[PARSER] Shutting down...")
+        
+        # Stop dungeon monitor
+        self._dungeon_monitor_running = False
+        if self._dungeon_monitor_thread and self._dungeon_monitor_thread.is_alive():
+            self._dungeon_monitor_thread.join(timeout=2.0)
         
         # Wait for active threads to complete (with timeout)
         for thread in self._active_threads:

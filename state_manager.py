@@ -41,6 +41,26 @@ class RecordingState:
         
         print(f"[STATE] 🏁 Encounter started: {boss_name} (ID: {boss_id})")
     
+    def start_dungeon(self, dungeon_id: int, dungeon_name: str, 
+                     dungeon_level: int, timestamp: str = ""):
+        """Start tracking a Mythic+ dungeon run.
+        
+        Args:
+            dungeon_id: Dungeon ID
+            dungeon_name: Dungeon name
+            dungeon_level: Key level
+            timestamp: Log timestamp when dungeon started
+        """
+        self.dungeon_active = True
+        self.dungeon_id = dungeon_id
+        self.dungeon_name = dungeon_name
+        self.dungeon_level = dungeon_level
+        self.dungeon_start_time = time.time()
+        self.dungeon_start_timestamp = timestamp
+        self.last_activity_time = time.time()
+        
+        print(f"[STATE] 🏁 M+ Dungeon started: {dungeon_name} (+{dungeon_level})")
+    
     def start_recording(self):
         """Mark recording as started."""
         self.recording = True
@@ -65,6 +85,34 @@ class RecordingState:
         self.difficulty_id = None
         self.instance_id = None
         self.encounter_start_time = None
+        
+        # Dungeon state
+        self.dungeon_active = False
+        self.dungeon_id = None
+        self.dungeon_name = None
+        self.dungeon_level = None
+        self.dungeon_start_time = None
+        self.dungeon_start_timestamp = None
+        self.last_activity_time = None
+    
+    def update_activity(self):
+        """Update last activity timestamp."""
+        self.last_activity_time = time.time()
+    
+    def is_dungeon_idle(self, timeout_seconds: int) -> bool:
+        """Check if dungeon has been idle for too long.
+        
+        Args:
+            timeout_seconds: Maximum idle time in seconds
+            
+        Returns:
+            True if dungeon is idle beyond timeout, False otherwise
+        """
+        if not self.dungeon_active or not self.last_activity_time:
+            return False
+        
+        idle_time = time.time() - self.last_activity_time
+        return idle_time > timeout_seconds
     
     # ---------------------------------------------------------------------
     # State Queries
@@ -73,12 +121,17 @@ class RecordingState:
     @property
     def is_recording(self) -> bool:
         """Check if currently recording."""
-        return self.recording and self.encounter_active
+        return self.recording and (self.encounter_active or self.dungeon_active)
     
     @property
     def has_boss_info(self) -> bool:
         """Check if boss information is available."""
         return self.boss_name is not None and self.difficulty_id is not None
+    
+    @property
+    def has_dungeon_info(self) -> bool:
+        """Check if dungeon information is available."""
+        return self.dungeon_name is not None and self.dungeon_level is not None
     
     def get_encounter_duration(self) -> float:
         """Get current encounter duration in seconds.
@@ -86,9 +139,11 @@ class RecordingState:
         Returns:
             Duration in seconds, or 0 if no encounter active
         """
-        if not self.encounter_start_time:
-            return 0.0
-        return time.time() - self.encounter_start_time
+        if self.encounter_active and self.encounter_start_time:
+            return time.time() - self.encounter_start_time
+        elif self.dungeon_active and self.dungeon_start_time:
+            return time.time() - self.dungeon_start_time
+        return 0.0
     
     def get_recording_duration(self) -> float:
         """Get current recording duration in seconds.
@@ -106,6 +161,13 @@ class RecordingState:
     
     def __str__(self) -> str:
         """Get string representation of current state."""
+        if self.dungeon_active:
+            if self.recording:
+                duration = self.get_recording_duration()
+                return f"RecordingState(M+ RECORDING {self.dungeon_name} +{self.dungeon_level}, {duration:.1f}s)"
+            else:
+                return f"RecordingState(M+ {self.dungeon_name} +{self.dungeon_level}, not recording)"
+        
         if not self.encounter_active:
             return "RecordingState(IDLE)"
         
@@ -113,9 +175,9 @@ class RecordingState:
         
         if self.recording:
             duration = self.get_recording_duration()
-            return f"RecordingState(RECORDING {boss_name}, {duration:.1f}s)"
+            return f"RecordingState(RECORDING {boss_info}, {duration:.1f}s)"
         else:
-            return f"RecordingState(ENCOUNTER {boss_name}, not recording)"
+            return f"RecordingState(ENCOUNTER {boss_info}, not recording)"
     
     def summary(self) -> dict:
         """Get summary of current state as dictionary.
@@ -132,4 +194,10 @@ class RecordingState:
             'instance_id': self.instance_id,
             'encounter_duration': self.get_encounter_duration(),
             'recording_duration': self.get_recording_duration(),
+            'dungeon_active': self.dungeon_active,
+            'dungeon_id': self.dungeon_id,
+            'dungeon_name': self.dungeon_name,
+            'dungeon_level': self.dungeon_level,
+            'dungeon_start_timestamp': self.dungeon_start_timestamp,
+            'last_activity_time': self.last_activity_time,
         }

@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,16 +8,20 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <style>
-        [x-cloak] { display: none !important; }
+        [x-cloak] {
+            display: none !important;
+        }
     </style>
 </head>
+
 <body class="bg-gray-900 text-gray-100 min-h-screen">
     <div x-data="configApp()" x-init="loadConfig()" class="container mx-auto px-4 py-8 max-w-4xl">
         <header class="mb-8 flex items-center justify-between">
             <div class="flex items-center gap-4">
                 <a href="/" class="p-2 text-gray-400 hover:text-amber-500 transition-colors" title="Back to Dashboard">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
                     </svg>
                 </a>
                 <div>
@@ -27,16 +32,19 @@
         </header>
 
         <div x-show="message" x-cloak
-             :class="messageType === 'success' ? 'bg-green-900/50 border-green-500' : 'bg-red-900/50 border-red-500'"
-             class="border rounded-lg p-4 mb-6 flex items-center justify-between">
+            :class="messageType === 'success' ? 'bg-green-900/50 border-green-500' : 'bg-red-900/50 border-red-500'"
+            class="border rounded-lg p-4 mb-6 flex items-center justify-between">
             <span x-text="message"></span>
             <button @click="message = ''" class="text-gray-400 hover:text-white">&times;</button>
         </div>
 
         <div x-show="loading" x-cloak class="flex items-center justify-center py-12">
-            <svg class="animate-spin h-8 w-8 text-amber-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <svg class="animate-spin h-8 w-8 text-amber-500" xmlns="http://www.w3.org/2000/svg" fill="none"
+                viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                <path class="opacity-75" fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                </path>
             </svg>
             <span class="ml-3">Loading configuration...</span>
         </div>
@@ -45,8 +53,11 @@
             <section class="bg-gray-800 rounded-lg p-6">
                 <h2 class="text-xl font-semibold text-amber-400 mb-4 flex items-center">
                     <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z">
+                        </path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
                     </svg>
                     General
                 </h2>
@@ -54,19 +65,19 @@
                     <div>
                         <label class="block text-sm font-medium text-gray-300 mb-1">Log Directory</label>
                         <input type="text" x-model="config.general.log_dir"
-                               class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent">
+                            class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent">
                         <p class="text-xs text-gray-500 mt-1">Path to your WoW Logs folder</p>
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-300 mb-1">Log Pattern</label>
                         <input type="text" x-model="config.general.log_pattern"
-                               class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 font-mono text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent">
+                            class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 font-mono text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent">
                         <p class="text-xs text-gray-500 mt-1">Regex pattern to match combat log files</p>
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-300 mb-1">Recording Extension</label>
                         <input type="text" x-model="config.general.recording_extension"
-                               class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent">
+                            class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent">
                         <p class="text-xs text-gray-500 mt-1">Must match your OBS output format (e.g., .mp4, .mkv)</p>
                     </div>
                 </div>
@@ -75,7 +86,9 @@
             <section class="bg-gray-800 rounded-lg p-6">
                 <h2 class="text-xl font-semibold text-amber-400 mb-4 flex items-center">
                     <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z">
+                        </path>
                     </svg>
                     OBS WebSocket
                 </h2>
@@ -83,17 +96,17 @@
                     <div>
                         <label class="block text-sm font-medium text-gray-300 mb-1">Host</label>
                         <input type="text" x-model="config.obs.host"
-                               class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent">
+                            class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent">
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-300 mb-1">Port</label>
                         <input type="number" x-model.number="config.obs.port"
-                               class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent">
+                            class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent">
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-300 mb-1">Password</label>
                         <input type="password" x-model="config.obs.password" placeholder="Leave empty if none"
-                               class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent">
+                            class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent">
                     </div>
                 </div>
             </section>
@@ -101,7 +114,9 @@
             <section class="bg-gray-800 rounded-lg p-6">
                 <h2 class="text-xl font-semibold text-amber-400 mb-4 flex items-center">
                     <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4V2a1 1 0 011-1h8a1 1 0 011 1v2m-9 0h10m-10 0a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V6a2 2 0 00-2-2M9 14l2 2 4-4"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M7 4V2a1 1 0 011-1h8a1 1 0 011 1v2m-9 0h10m-10 0a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V6a2 2 0 00-2-2M9 14l2 2 4-4">
+                        </path>
                     </svg>
                     Recording Settings
                 </h2>
@@ -109,13 +124,14 @@
                     <div class="flex items-center justify-between">
                         <div>
                             <label class="text-sm font-medium text-gray-300">Auto Rename</label>
-                            <p class="text-xs text-gray-500">Automatically rename recordings with boss name and difficulty</p>
+                            <p class="text-xs text-gray-500">Automatically rename recordings with boss name and
+                                difficulty</p>
                         </div>
                         <button type="button" @click="config.recording.auto_rename = !config.recording.auto_rename"
-                                :class="config.recording.auto_rename ? 'bg-amber-500' : 'bg-gray-600'"
-                                class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full transition-colors duration-200 ease-in-out">
+                            :class="config.recording.auto_rename ? 'bg-amber-500' : 'bg-gray-600'"
+                            class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full transition-colors duration-200 ease-in-out">
                             <span :class="config.recording.auto_rename ? 'translate-x-5' : 'translate-x-0'"
-                                  class="pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"></span>
+                                class="pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"></span>
                         </button>
                     </div>
 
@@ -124,11 +140,12 @@
                             <label class="text-sm font-medium text-gray-300">Delete Short Recordings</label>
                             <p class="text-xs text-gray-500">Auto-delete recordings shorter than minimum duration</p>
                         </div>
-                        <button type="button" @click="config.recording.delete_short_recordings = !config.recording.delete_short_recordings"
-                                :class="config.recording.delete_short_recordings ? 'bg-amber-500' : 'bg-gray-600'"
-                                class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full transition-colors duration-200 ease-in-out">
+                        <button type="button"
+                            @click="config.recording.delete_short_recordings = !config.recording.delete_short_recordings"
+                            :class="config.recording.delete_short_recordings ? 'bg-amber-500' : 'bg-gray-600'"
+                            class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full transition-colors duration-200 ease-in-out">
                             <span :class="config.recording.delete_short_recordings ? 'translate-x-5' : 'translate-x-0'"
-                                  class="pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"></span>
+                                class="pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"></span>
                         </button>
                     </div>
 
@@ -136,58 +153,72 @@
                         <div>
                             <label class="block text-sm font-medium text-gray-300 mb-1">Rename Delay (s)</label>
                             <input type="number" x-model.number="config.recording.rename_delay" min="0"
-                                   class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent">
+                                class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent">
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-300 mb-1">Max Rename Attempts</label>
                             <input type="number" x-model.number="config.recording.max_rename_attempts" min="1"
-                                   class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent">
+                                class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent">
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-300 mb-1">Min Duration (s)</label>
                             <input type="number" x-model.number="config.recording.min_recording_duration" min="0"
-                                   class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent">
+                                class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent">
                         </div>
                     </div>
 
                     <div>
                         <label class="block text-sm font-medium text-gray-300 mb-1">Fallback Recording Path</label>
                         <input type="text" x-model="config.recording.recording_path_fallback"
-                               class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent">
+                            class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent">
                         <p class="text-xs text-gray-500 mt-1">Used if OBS recording directory can't be detected</p>
                     </div>
                 </div>
             </section>
 
+            <!-- In config.html, add to the difficulties section -->
             <section class="bg-gray-800 rounded-lg p-6">
                 <h2 class="text-xl font-semibold text-amber-400 mb-4 flex items-center">
                     <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                     </svg>
                     Raid Difficulties
                 </h2>
                 <p class="text-sm text-gray-400 mb-4">Select which raid difficulties to record</p>
-                <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+                <div class="grid grid-cols-2 md:grid-cols-6 gap-4">
                     <template x-for="(enabled, diff) in config.difficulties" :key="diff">
                         <button type="button" @click="config.difficulties[diff] = !config.difficulties[diff]"
-                                :class="config.difficulties[diff] ? 'bg-amber-500/20 border-amber-500 text-amber-400' : 'bg-gray-700 border-gray-600 text-gray-400'"
-                                class="border-2 rounded-lg px-4 py-3 text-center font-medium transition-all hover:border-amber-400">
+                            :class="config.difficulties[diff] ? 'bg-amber-500/20 border-amber-500 text-amber-400' : 'bg-gray-700 border-gray-600 text-gray-400'"
+                            class="border-2 rounded-lg px-4 py-3 text-center font-medium transition-all hover:border-amber-400">
                             <span x-text="formatDifficulty(diff)"></span>
                         </button>
                     </template>
                 </div>
             </section>
 
+            <!-- Add dungeon timeout setting in recording settings -->
+            <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Dungeon Timeout (s)</label>
+                <input type="number" x-model.number="config.recording.dungeon_timeout_seconds" min="30"
+                    class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent">
+                <p class="text-xs text-gray-500 mt-1">Timeout for M+ dungeon idle detection (default: 120s)</p>
+            </div>
+
             <div class="flex justify-end space-x-4">
                 <button type="button" @click="loadConfig()"
-                        class="px-6 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg font-medium transition-colors">
+                    class="px-6 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg font-medium transition-colors">
                     Reset
                 </button>
                 <button type="submit" :disabled="saving"
-                        class="px-6 py-2 bg-amber-500 hover:bg-amber-600 text-gray-900 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center">
-                    <svg x-show="saving" class="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    class="px-6 py-2 bg-amber-500 hover:bg-amber-600 text-gray-900 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center">
+                    <svg x-show="saving" class="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg"
+                        fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
+                        </circle>
+                        <path class="opacity-75" fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                        </path>
                     </svg>
                     Save Configuration
                 </button>
@@ -280,7 +311,8 @@
                         'record_normal': 'Normal',
                         'record_heroic': 'Heroic',
                         'record_mythic': 'Mythic',
-                        'record_other': 'Other'
+                        'record_other': 'Other',
+                        'record_mplus': 'M+'  // NEW
                     };
                     return names[key] || key;
                 }
@@ -288,4 +320,5 @@
         }
     </script>
 </body>
+
 </html>

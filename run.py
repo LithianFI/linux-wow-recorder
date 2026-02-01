@@ -87,6 +87,7 @@ def get_config():
             'min_recording_duration': config_manager.MIN_RECORDING_DURATION,
             'delete_short_recordings': config_manager.DELETE_SHORT_RECORDINGS,
             'recording_path_fallback': str(config_manager.RECORDING_PATH_FALLBACK or ''),
+            'dungeon_timeout_seconds': config_manager.DUNGEON_TIMEOUT_SECONDS,  # NEW
         },
         'difficulties': {
             'record_lfr': config_manager.RECORD_LFR,
@@ -94,6 +95,7 @@ def get_config():
             'record_heroic': config_manager.RECORD_HEROIC,
             'record_mythic': config_manager.RECORD_MYTHIC,
             'record_other': config_manager.RECORD_OTHER,
+            'record_mplus': config_manager.RECORD_MPLUS,  # NEW
         },
         'boss_names': config_manager.BOSS_NAME_OVERRIDES,
     }
@@ -128,6 +130,7 @@ def save_config():
             if 'password' in obs:
                 config_manager.config.set('OBS', 'password', obs['password'])
 
+
         if 'recording' in data:
             recording = data['recording']
             if 'auto_rename' in recording:
@@ -142,6 +145,8 @@ def save_config():
                 config_manager.config.set('Recording', 'delete_short_recordings', str(recording['delete_short_recordings']).lower())
             if 'recording_path_fallback' in recording:
                 config_manager.config.set('Recording', 'recording_path_fallback', recording['recording_path_fallback'])
+            if 'dungeon_timeout_seconds' in recording:  # NEW
+                config_manager.config.set('Recording', 'dungeon_timeout_seconds', str(recording['dungeon_timeout_seconds']))
 
         if 'difficulties' in data:
             difficulties = data['difficulties']
@@ -155,6 +160,8 @@ def save_config():
                 config_manager.config.set('Difficulties', 'record_mythic', str(difficulties['record_mythic']).lower())
             if 'record_other' in difficulties:
                 config_manager.config.set('Difficulties', 'record_other', str(difficulties['record_other']).lower())
+            if 'record_mplus' in difficulties:  # NEW
+                config_manager.config.set('Difficulties', 'record_mplus', str(difficulties['record_mplus']).lower())
 
         config_manager.save()
 

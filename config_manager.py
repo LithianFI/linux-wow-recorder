@@ -44,6 +44,7 @@ class ConfigManager:
             'max_rename_attempts': '10',
             'min_recording_duration': '5',
             'delete_short_recordings': 'true',
+            'dungeon_timeout_seconds': '120',  # NEW: Default 2 minutes
         },
         'Difficulties': {
             'record_lfr': 'false',
@@ -51,6 +52,7 @@ class ConfigManager:
             'record_heroic': 'true',
             'record_mythic': 'true',
             'record_other': 'false',
+            'record_mplus': 'true',  # NEW: M+ dungeon recording
         },
         'BossNames': {},  # Empty by default
     }
@@ -322,6 +324,16 @@ record_other = false
     def RECORD_OTHER(self) -> bool:
         """Check if other difficulties should be recorded."""
         return self.config.getboolean('Difficulties', 'record_other', fallback=False)
+    
+    @property
+    def DUNGEON_TIMEOUT_SECONDS(self) -> int:
+        """Get dungeon idle timeout in seconds."""
+        return self.config.getint('Recording', 'dungeon_timeout_seconds', fallback=120)
+
+    @property
+    def RECORD_MPLUS(self) -> bool:
+        """Check if Mythic+ dungeons should be recorded."""
+        return self.config.getboolean('Difficulties', 'record_mplus', fallback=True)
     
     # ---------------------------------------------------------------------
     # Difficulty Management
