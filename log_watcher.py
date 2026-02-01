@@ -9,7 +9,7 @@ from threading import Event, Thread
 from pathlib import Path
 from watchdog.events import FileSystemEventHandler
 
-from combat_parser import CombatParser
+from combat_parser.parser import CombatParser
 
 
 class LogTailer:

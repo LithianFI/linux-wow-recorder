@@ -17,7 +17,7 @@ from flask_socketio import SocketIO, emit
 from config_manager import ConfigManager
 from obs_client import OBSClient
 from state_manager import RecordingState
-from combat_parser import CombatParser
+from combat_parser.parser import CombatParser
 from log_watcher import LogMonitor
 
 
