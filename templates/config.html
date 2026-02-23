@@ -149,6 +149,49 @@
                         </button>
                     </div>
 
+                    <!-- File Naming Scheme -->
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-300 mb-2">File Naming Scheme</label>
+                        <select x-model="config.recording.file_naming_scheme"
+                            class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent">
+                            <option value="simple">Simple (YYYY-MM-DD_HH-MM-SS_Boss_Difficulty)</option>
+                            <option value="wcr">Warcraft Recorder (YYYY-MM-DD HH-MM-SS - Player - Boss [Diff] (Result))
+                            </option>
+                        </select>
+                        <p class="text-xs text-gray-500 mt-1">Choose how recording files are named</p>
+                    </div>
+
+                    <!-- Generate Metadata JSON Toggle -->
+                    <div class="flex items-center justify-between mb-4">
+                        <div>
+                            <label class="text-sm font-medium text-gray-300">Generate Metadata JSON</label>
+                            <p class="text-xs text-gray-500">Create companion .json files with encounter metadata</p>
+                        </div>
+                        <button type="button"
+                            @click="config.recording.generate_metadata_json = !config.recording.generate_metadata_json"
+                            :class="config.recording.generate_metadata_json ? 'bg-amber-500' : 'bg-gray-600'"
+                            class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full transition-colors duration-200 ease-in-out">
+                            <span :class="config.recording.generate_metadata_json ? 'translate-x-5' : 'translate-x-0'"
+                                class="pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"></span>
+                        </button>
+                    </div>
+
+                    <!-- Track Player Deaths Toggle -->
+                    <div class="flex items-center justify-between mb-4">
+                        <div>
+                            <label class="text-sm font-medium text-gray-300">Track Player Deaths</label>
+                            <p class="text-xs text-gray-500">Record death events in metadata JSON</p>
+                        </div>
+                        <button type="button"
+                            @click="config.recording.track_player_deaths = !config.recording.track_player_deaths"
+                            :class="config.recording.track_player_deaths ? 'bg-amber-500' : 'bg-gray-600'"
+                            class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full transition-colors duration-200 ease-in-out">
+                            <span :class="config.recording.track_player_deaths ? 'translate-x-5' : 'translate-x-0'"
+                                class="pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"></span>
+                        </button>
+                    </div>
+
+
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
                             <label class="block text-sm font-medium text-gray-300 mb-1">Rename Delay (s)</label>
@@ -194,6 +237,139 @@
                             <span x-text="formatDifficulty(diff)"></span>
                         </button>
                     </template>
+                </div>
+            </section>
+
+            <!-- Cloud Upload Section -->
+            <section class="bg-gray-800 rounded-lg p-6">
+                <h2 class="text-xl font-semibold text-amber-400 mb-4 flex items-center">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12">
+                        </path>
+                    </svg>
+                    Cloud Upload
+                </h2>
+
+                <div class="space-y-4">
+                    <!-- Enable Cloud Upload -->
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <label class="text-sm font-medium text-gray-300">Enable Cloud Upload</label>
+                            <p class="text-xs text-gray-500">Automatically upload recordings to cloud storage</p>
+                        </div>
+                        <button type="button" @click="config.cloud_upload.enabled = !config.cloud_upload.enabled"
+                            :class="config.cloud_upload.enabled ? 'bg-amber-500' : 'bg-gray-600'"
+                            class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full transition-colors duration-200 ease-in-out">
+                            <span :class="config.cloud_upload.enabled ? 'translate-x-5' : 'translate-x-0'"
+                                class="pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"></span>
+                        </button>
+                    </div>
+
+                    <div x-show="config.cloud_upload.enabled" x-cloak
+                        class="space-y-4 border-l-2 border-amber-500/30 pl-4 ml-2">
+                        <!-- Provider Selection -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-300 mb-2">Provider</label>
+                            <select x-model="config.cloud_upload.provider"
+                                class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent">
+                                <option value="warcraft_recorder">Warcraft Recorder Cloud</option>
+                                <option value="google_drive" disabled>Google Drive (Coming Soon)</option>
+                                <option value="proton_drive" disabled>Proton Drive (Coming Soon)</option>
+                            </select>
+                        </div>
+
+                        <!-- Warcraft Recorder Settings -->
+                        <div x-show="config.cloud_upload.provider === 'warcraft_recorder'" class="space-y-3">
+                            <div class="bg-blue-900/20 border border-blue-500/30 rounded-lg p-3 text-sm">
+                                <div class="flex items-start gap-2">
+                                    <svg class="w-5 h-5 text-blue-400 mt-0.5 shrink-0" fill="none" stroke="currentColor"
+                                        viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    <div>
+                                        <p class="text-blue-300 font-medium mb-1">Warcraft Recorder Account Required</p>
+                                        <p class="text-blue-200/70">
+                                            Create a free account at
+                                            <a href="https://warcraftrecorder.com" target="_blank"
+                                                class="text-blue-400 hover:text-blue-300 underline">warcraftrecorder.com</a>
+                                            to use cloud storage.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-300 mb-1">Username</label>
+                                <input type="text" x-model="config.cloud_upload.wcr_username"
+                                    placeholder="Your WCR username"
+                                    class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent">
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-300 mb-1">Password</label>
+                                <input type="password" x-model="config.cloud_upload.wcr_password"
+                                    placeholder="Your WCR password"
+                                    class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent">
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-300 mb-1">Guild/Bucket Name</label>
+                                <input type="text" x-model="config.cloud_upload.wcr_guild" placeholder="Your guild name"
+                                    class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent">
+                                <p class="text-xs text-gray-500 mt-1">The guild/bucket to upload recordings to</p>
+                            </div>
+                        </div>
+
+                        <!-- Upload Options -->
+                        <div class="space-y-3 pt-2 border-t border-gray-700">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <label class="text-sm font-medium text-gray-300">Auto Upload</label>
+                                    <p class="text-xs text-gray-500">Upload recordings automatically after completion
+                                    </p>
+                                </div>
+                                <button type="button"
+                                    @click="config.cloud_upload.auto_upload = !config.cloud_upload.auto_upload"
+                                    :class="config.cloud_upload.auto_upload ? 'bg-amber-500' : 'bg-gray-600'"
+                                    class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full transition-colors duration-200 ease-in-out">
+                                    <span :class="config.cloud_upload.auto_upload ? 'translate-x-5' : 'translate-x-0'"
+                                        class="pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"></span>
+                                </button>
+                            </div>
+
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <label class="text-sm font-medium text-gray-300">Delete After Upload</label>
+                                    <p class="text-xs text-gray-500">Delete local file after successful upload</p>
+                                </div>
+                                <button type="button"
+                                    @click="config.cloud_upload.delete_after_upload = !config.cloud_upload.delete_after_upload"
+                                    :class="config.cloud_upload.delete_after_upload ? 'bg-amber-500' : 'bg-gray-600'"
+                                    class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full transition-colors duration-200 ease-in-out">
+                                    <span
+                                        :class="config.cloud_upload.delete_after_upload ? 'translate-x-5' : 'translate-x-0'"
+                                        class="pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"></span>
+                                </button>
+                            </div>
+
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <label class="text-sm font-medium text-gray-300">Upload on Startup</label>
+                                    <p class="text-xs text-gray-500">Upload pending recordings when recorder starts</p>
+                                </div>
+                                <button type="button"
+                                    @click="config.cloud_upload.upload_on_startup = !config.cloud_upload.upload_on_startup"
+                                    :class="config.cloud_upload.upload_on_startup ? 'bg-amber-500' : 'bg-gray-600'"
+                                    class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full transition-colors duration-200 ease-in-out">
+                                    <span
+                                        :class="config.cloud_upload.upload_on_startup ? 'translate-x-5' : 'translate-x-0'"
+                                        class="pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"></span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </section>
 
@@ -249,12 +425,16 @@
                         password: ''
                     },
                     recording: {
-                        auto_rename: true,
+                        auto_rename: false,
                         rename_delay: 3,
                         max_rename_attempts: 10,
                         min_recording_duration: 5,
                         delete_short_recordings: true,
-                        recording_path_fallback: ''
+                        recording_path_fallback: '',
+                        dungeon_timeout_seconds: 120,
+                        file_naming_scheme: 'simple',
+                        generate_metadata_json: false,
+                        track_player_deaths: false,
                     },
                     difficulties: {
                         record_lfr: false,
@@ -262,7 +442,18 @@
                         record_heroic: true,
                         record_mythic: true,
                         record_other: false
+                    },
+                    cloud_upload: {
+                        enabled: false,
+                        provider: 'warcraft_recorder',
+                        auto_upload: true,
+                        delete_after_upload: false,
+                        upload_on_startup: false,
+                        wcr_username: '',
+                        wcr_password: '',
+                        wcr_guild: '',
                     }
+
                 },
 
                 async loadConfig() {
@@ -272,6 +463,33 @@
                         if (!response.ok) throw new Error('Failed to load config');
                         const data = await response.json();
                         this.config = data;
+
+                        if (!this.config.cloud_upload) {
+                            this.config.cloud_upload = {
+                                enabled: false,
+                                provider: 'warcraft_recorder',
+                                auto_upload: true,
+                                delete_after_upload: false,
+                                upload_on_startup: false,
+                                wcr_username: '',
+                                wcr_password: '',
+                                wcr_guild: '',
+                            };
+                        }
+
+                        this.config.recording = {
+                            auto_rename: data.recording?.auto_rename !== false,
+                            rename_delay: data.recording?.rename_delay || 3,
+                            max_rename_attempts: data.recording?.max_rename_attempts || 10,
+                            min_recording_duration: data.recording?.min_recording_duration || 5,
+                            delete_short_recordings: data.recording?.delete_short_recordings !== false,
+                            recording_path_fallback: data.recording?.recording_path_fallback || '',
+                            dungeon_timeout_seconds: data.recording?.dungeon_timeout_seconds || 120,
+                            // ADD THESE THREE:
+                            file_naming_scheme: data.recording?.file_naming_scheme || 'simple',
+                            generate_metadata_json: data.recording?.generate_metadata_json === true,
+                            track_player_deaths: data.recording?.track_player_deaths === true,
+                        };
                     } catch (error) {
                         this.showMessage('Failed to load configuration: ' + error.message, 'error');
                     } finally {

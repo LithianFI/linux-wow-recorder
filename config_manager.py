@@ -44,7 +44,10 @@ class ConfigManager:
             'max_rename_attempts': '10',
             'min_recording_duration': '5',
             'delete_short_recordings': 'true',
-            'dungeon_timeout_seconds': '120',  # NEW: Default 2 minutes
+            'dungeon_timeout_seconds': '120',
+            'file_naming_scheme': 'simple',
+            'generate_metadata_json': 'false',
+            'track_player_deaths': 'false',
         },
         'Difficulties': {
             'record_lfr': 'false',
@@ -52,9 +55,23 @@ class ConfigManager:
             'record_heroic': 'true',
             'record_mythic': 'true',
             'record_other': 'false',
-            'record_mplus': 'true',  # NEW: M+ dungeon recording
+            'record_mplus': 'true',
         },
-        'BossNames': {},  # Empty by default
+        'CloudUpload': {
+            'enabled': 'false',
+            'provider': 'warcraft_recorder',
+            'auto_upload': 'true',
+            'delete_after_upload': 'false',
+            'upload_on_startup': 'false',
+            'wcr_username': '',
+            'wcr_password': '',
+            'wcr_guild': '',
+            'gdrive_enabled': 'false',
+            'gdrive_folder_id': '',
+            'proton_enabled': 'false',
+            'proton_folder': '',
+        },
+        'BossNames': {},
     }
     
     # ---------------------------------------------------------------------
@@ -169,6 +186,19 @@ delete_short_recordings = true
 # Fallback recording path if OBS directory cannot be detected
 recording_path_fallback = {recording_path}
 
+# Timeout in seconds for M+ dungeon idle detection
+dungeon_timeout_seconds = 120
+
+# File naming scheme
+# Options: 'simple' (YYYY-MM-DD_HH-MM-SS_Boss_Difficulty) or 'wcr' (Warcraft Recorder style)
+file_naming_scheme = simple
+
+# Generate companion JSON metadata files (WCR compatible)
+generate_metadata_json = false
+
+# Track player deaths in metadata
+track_player_deaths = false
+
 [Difficulties]
 # Which raid difficulties to record
 # Set to true to record, false to ignore
@@ -178,6 +208,36 @@ record_normal = true
 record_heroic = true
 record_mythic = true
 record_other = false
+record_mplus = true
+
+[CloudUpload]
+# Enable cloud upload functionality
+enabled = false
+
+# Cloud provider: warcraft_recorder, google_drive, proton_drive
+provider = warcraft_recorder
+
+# Auto upload after recording completion
+auto_upload = true
+
+# Delete local file after successful upload
+delete_after_upload = false
+
+# Upload pending files on startup
+upload_on_startup = false
+
+# Warcraft Recorder Cloud settings
+wcr_username = 
+wcr_password = 
+wcr_guild = 
+
+# Google Drive settings (future)
+gdrive_enabled = false
+gdrive_folder_id = 
+
+# Proton Drive settings (future)
+proton_enabled = false
+proton_folder = 
 
 [BossNames]
 # Boss ID to name overrides (optional)
@@ -335,6 +395,85 @@ record_other = false
         """Check if Mythic+ dungeons should be recorded."""
         return self.config.getboolean('Difficulties', 'record_mplus', fallback=True)
     
+    @property
+    def FILE_NAMING_SCHEME(self) -> str:
+        """Get file naming scheme ('wcr' or 'simple')."""
+        return self.config.get('Recording', 'file_naming_scheme', fallback='simple', raw=True)
+    
+    @property
+    def GENERATE_METADATA_JSON(self) -> bool:
+        """Check if metadata JSON should be generated."""
+        return self.config.getboolean('Recording', 'generate_metadata_json', fallback=False)
+    
+    @property
+    def TRACK_PLAYER_DEATHS(self) -> bool:
+        """Check if player deaths should be tracked."""
+        return self.config.getboolean('Recording', 'track_player_deaths', fallback=False)
+    
+    # Cloud Upload settings
+    @property
+    def CLOUD_UPLOAD_ENABLED(self) -> bool:
+        """Check if cloud upload is enabled."""
+        return self.config.getboolean('CloudUpload', 'enabled', fallback=False)
+    
+    @property
+    def CLOUD_UPLOAD_PROVIDER(self) -> str:
+        """Get cloud upload provider."""
+        return self.config.get('CloudUpload', 'provider', fallback='warcraft_recorder', raw=True)
+    
+    @property
+    def CLOUD_AUTO_UPLOAD(self) -> bool:
+        """Check if auto-upload is enabled."""
+        return self.config.getboolean('CloudUpload', 'auto_upload', fallback=True)
+    
+    @property
+    def CLOUD_DELETE_AFTER_UPLOAD(self) -> bool:
+        """Check if files should be deleted after upload."""
+        return self.config.getboolean('CloudUpload', 'delete_after_upload', fallback=False)
+    
+    @property
+    def CLOUD_UPLOAD_ON_STARTUP(self) -> bool:
+        """Check if pending uploads should be processed on startup."""
+        return self.config.getboolean('CloudUpload', 'upload_on_startup', fallback=False)
+    
+    # Warcraft Recorder settings
+    @property
+    def WCR_USERNAME(self) -> str:
+        """Get Warcraft Recorder username."""
+        return self.config.get('CloudUpload', 'wcr_username', fallback='', raw=True)
+    
+    @property
+    def WCR_PASSWORD(self) -> str:
+        """Get Warcraft Recorder password."""
+        return self.config.get('CloudUpload', 'wcr_password', fallback='', raw=True)
+    
+    @property
+    def WCR_GUILD(self) -> str:
+        """Get Warcraft Recorder guild name."""
+        return self.config.get('CloudUpload', 'wcr_guild', fallback='', raw=True)
+    
+    # Google Drive settings (future)
+    @property
+    def GDRIVE_ENABLED(self) -> bool:
+        """Check if Google Drive upload is enabled."""
+        return self.config.getboolean('CloudUpload', 'gdrive_enabled', fallback=False)
+    
+    @property
+    def GDRIVE_FOLDER_ID(self) -> str:
+        """Get Google Drive folder ID."""
+        return self.config.get('CloudUpload', 'gdrive_folder_id', fallback='', raw=True)
+    
+    # Proton Drive settings (future)
+    @property
+    def PROTON_ENABLED(self) -> bool:
+        """Check if Proton Drive upload is enabled."""
+        return self.config.getboolean('CloudUpload', 'proton_enabled', fallback=False)
+    
+    @property
+    def PROTON_FOLDER(self) -> str:
+        """Get Proton Drive folder path."""
+        return self.config.get('CloudUpload', 'proton_folder', fallback='', raw=True)
+    
     # ---------------------------------------------------------------------
     # Difficulty Management
     # ---------------------------------------------------------------------
@@ -448,5 +587,12 @@ record_other = false
         print(f"  • Mythic: {'✓' if self.RECORD_MYTHIC else '✗'}")
         print(f"  • Other: {'✓' if self.RECORD_OTHER else '✗'}")
         print(f"  • Total IDs: {len(enabled)}")
+        
+        # Cloud upload summary
+        if self.CLOUD_UPLOAD_ENABLED:
+            print("\n[Cloud Upload]")
+            print(f"  • Enabled: ✓")
+            print(f"  • Provider: {self.CLOUD_UPLOAD_PROVIDER}")
+            print(f"  • Auto Upload: {'✓' if self.CLOUD_AUTO_UPLOAD else '✗'}")
         
         print("="*60)

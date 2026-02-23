@@ -307,6 +307,86 @@
                 </div>
             </div>
         </div>
+
+            <!-- Cloud Upload Status -->
+    <section class="bg-gray-800 rounded-lg p-6 mt-6" x-show="cloudStatus.enabled">
+        <h2 class="text-lg font-semibold text-gray-300 mb-4 flex items-center gap-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12">
+                </path>
+            </svg>
+            Cloud Upload
+            <span class="ml-auto text-xs px-2 py-1 rounded-full"
+                :class="cloudStatus.authenticated ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'">
+                <span x-text="cloudStatus.authenticated ? 'Connected' : 'Disconnected'"></span>
+            </span>
+        </h2>
+
+        <div class="space-y-3">
+            <!-- Storage Info -->
+            <div x-show="cloudStatus.storage" class="flex items-center justify-between">
+                <span class="text-gray-400 text-sm">Storage</span>
+                <div class="text-right">
+                    <span class="text-gray-200 text-sm" x-text="cloudStatus.storage?.usage_gb || '0'"></span>
+                    <span class="text-gray-500 text-sm">GB / </span>
+                    <span class="text-gray-200 text-sm" x-text="cloudStatus.storage?.limit_gb || '0'"></span>
+                    <span class="text-gray-500 text-sm">GB</span>
+                </div>
+            </div>
+
+            <!-- Storage Bar -->
+            <div x-show="cloudStatus.storage" class="w-full bg-gray-700 rounded-full h-2">
+                <div class="h-2 rounded-full transition-all duration-300"
+                    :class="cloudStatus.storage?.usage_percent > 90 ? 'bg-red-500' : (cloudStatus.storage?.usage_percent > 70 ? 'bg-yellow-500' : 'bg-green-500')"
+                    :style="`width: ${Math.min(cloudStatus.storage?.usage_percent || 0, 100)}%`">
+                </div>
+            </div>
+
+            <!-- Upload Queue -->
+            <div x-show="cloudStatus.queue_size > 0 || cloudStatus.active_upload" class="pt-2 border-t border-gray-700">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-gray-400 text-sm">Upload Queue</span>
+                    <span class="text-amber-400 text-sm font-medium" x-text="cloudStatus.queue_size"></span>
+                </div>
+
+                <!-- Active Upload -->
+                <div x-show="cloudStatus.active_upload" class="bg-gray-700/50 rounded-lg p-3">
+                    <div class="flex items-center gap-2 mb-2">
+                        <svg class="w-4 h-4 text-amber-400 animate-spin" fill="none" stroke="currentColor"
+                            viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
+                            </path>
+                        </svg>
+                        <span class="text-gray-300 text-sm font-medium">Uploading</span>
+                    </div>
+                    <p class="text-gray-400 text-sm truncate" x-text="cloudStatus.active_upload"></p>
+                    <div class="mt-2 w-full bg-gray-600 rounded-full h-1.5">
+                        <div class="bg-amber-500 h-1.5 rounded-full transition-all duration-300"
+                            :style="`width: ${uploadProgress || 0}%`">
+                        </div>
+                    </div>
+                    <div class="flex justify-between mt-1 text-xs text-gray-500">
+                        <span x-text="`${uploadProgress || 0}%`"></span>
+                        <span x-text="uploadSpeed || ''"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Upload Stats -->
+            <div class="grid grid-cols-2 gap-3 pt-2 border-t border-gray-700">
+                <div class="text-center">
+                    <div class="text-2xl font-bold text-green-400" x-text="cloudStatus.completed_count || 0"></div>
+                    <div class="text-xs text-gray-500">Completed</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-2xl font-bold text-red-400" x-text="cloudStatus.failed_count || 0"></div>
+                    <div class="text-xs text-gray-500">Failed</div>
+                </div>
+            </div>
+        </div>
+    </section>
     </div>
 
     <script>
@@ -323,6 +403,19 @@
                 events: [],
                 recordings: [],
                 previewRecording: null,
+
+                cloudStatus: {
+                    enabled: false,
+                    authenticated: false,
+                    provider: '',
+                    queue_size: 0,
+                    active_upload: null,
+                    completed_count: 0,
+                    failed_count: 0,
+                    storage: null,
+                },
+                uploadProgress: 0,
+                uploadSpeed: '',
 
                 init() {
                     this.connectSocket();
@@ -367,6 +460,15 @@
 
                     this.socket.on('recordings_updated', () => {
                         this.fetchRecordings();
+                    });
+
+                    this.socket.on('cloud_status', (data) => {
+                        this.cloudStatus = data;
+                    });
+
+                    this.socket.on('upload_progress', (data) => {
+                        this.uploadProgress = data.progress_percent;
+                        this.uploadSpeed = data.upload_speed;
                     });
                 },
 

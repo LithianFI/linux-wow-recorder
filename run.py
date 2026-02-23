@@ -9,6 +9,7 @@ import time
 import signal
 import argparse
 import threading
+import asyncio
 from pathlib import Path
 
 from flask import Flask, render_template, jsonify, request
@@ -19,6 +20,7 @@ from obs_client import OBSClient
 from state_manager import RecordingState
 from combat_parser.parser import CombatParser
 from log_watcher import LogMonitor
+from typing import Optional
 
 from constants import (
     DEFAULT_WEB_HOST,
@@ -29,6 +31,14 @@ from constants import (
     LOG_PREFIXES,
 )
 
+from cloud_integration import (
+    CloudUploadManager,
+    initialize_cloud_upload,
+    should_auto_upload,
+)
+from cloud_upload import UploadProgress
+
+cloud_manager: Optional[CloudUploadManager] = None
 
 # -----------------------------------------------------------------------------
 # Flask App Setup
@@ -96,6 +106,9 @@ def get_config():
             'delete_short_recordings': config_manager.DELETE_SHORT_RECORDINGS,
             'recording_path_fallback': str(config_manager.RECORDING_PATH_FALLBACK or ''),
             'dungeon_timeout_seconds': config_manager.DUNGEON_TIMEOUT_SECONDS,
+            'file_naming_scheme': config_manager.FILE_NAMING_SCHEME,
+            'generate_metadata_json': config_manager.GENERATE_METADATA_JSON,
+            'track_player_deaths': config_manager.TRACK_PLAYER_DEATHS,
         },
         'difficulties': {
             'record_lfr': config_manager.RECORD_LFR,
@@ -106,6 +119,16 @@ def get_config():
             'record_mplus': config_manager.RECORD_MPLUS,
         },
         'boss_names': config_manager.BOSS_NAME_OVERRIDES,
+        'cloud_upload': {
+            'enabled': config_manager.CLOUD_UPLOAD_ENABLED,
+            'provider': config_manager.CLOUD_UPLOAD_PROVIDER,
+            'auto_upload': config_manager.CLOUD_AUTO_UPLOAD,
+            'delete_after_upload': config_manager.CLOUD_DELETE_AFTER_UPLOAD,
+            'upload_on_startup': config_manager.CLOUD_UPLOAD_ON_STARTUP,
+            'wcr_username': config_manager.WCR_USERNAME,
+            'wcr_password': config_manager.WCR_PASSWORD,
+            'wcr_guild': config_manager.WCR_GUILD,
+        },
     }
 
     return jsonify(config_data)
@@ -155,6 +178,12 @@ def save_config():
                 config_manager.config.set('Recording', 'recording_path_fallback', recording['recording_path_fallback'])
             if 'dungeon_timeout_seconds' in recording:  # NEW
                 config_manager.config.set('Recording', 'dungeon_timeout_seconds', str(recording['dungeon_timeout_seconds']))
+            if 'file_naming_scheme' in recording:
+                config_manager.config.set('Recording', 'file_naming_scheme', str(recording['file_naming_scheme']))
+            if 'generate_metadata_json' in recording:
+                config_manager.config.set('Recording', 'generate_metadata_json', str(recording['generate_metadata_json']).lower())
+            if 'track_player_deaths' in recording:
+                config_manager.config.set('Recording', 'track_player_deaths', str(recording['track_player_deaths']).lower())
 
         if 'difficulties' in data:
             difficulties = data['difficulties']
@@ -170,6 +199,26 @@ def save_config():
                 config_manager.config.set('Difficulties', 'record_other', str(difficulties['record_other']).lower())
             if 'record_mplus' in difficulties:  # NEW
                 config_manager.config.set('Difficulties', 'record_mplus', str(difficulties['record_mplus']).lower())
+
+        if 'cloud_upload' in data:
+            cloud = data['cloud_upload']
+            if 'enabled' in cloud:
+                config_manager.config.set('CloudUpload', 'enabled', str(cloud['enabled']).lower())
+            if 'provider' in cloud:
+                config_manager.config.set('CloudUpload', 'provider', cloud['provider'])
+            if 'auto_upload' in cloud:
+                config_manager.config.set('CloudUpload', 'auto_upload', str(cloud['auto_upload']).lower())
+            if 'delete_after_upload' in cloud:
+                config_manager.config.set('CloudUpload', 'delete_after_upload', str(cloud['delete_after_upload']).lower())
+            if 'upload_on_startup' in cloud:
+                config_manager.config.set('CloudUpload', 'upload_on_startup', str(cloud['upload_on_startup']).lower())
+            if 'wcr_username' in cloud:
+                config_manager.config.set('CloudUpload', 'wcr_username', cloud['wcr_username'])
+            if 'wcr_password' in cloud:
+                config_manager.config.set('CloudUpload', 'wcr_password', cloud['wcr_password'])
+            if 'wcr_guild' in cloud:
+                config_manager.config.set('CloudUpload', 'wcr_guild', cloud['wcr_guild'])
+
 
         config_manager.save()
 
@@ -291,6 +340,147 @@ def serve_video(filename: str):
 
     return send_file(file_path)
 
+# ============================================================================
+# Cloud Upload API Routes
+# ============================================================================
+
+@app.route('/api/cloud/status')
+def get_cloud_status():
+    """Get current cloud upload status."""
+    if not cloud_manager:
+        return jsonify({
+            'enabled': False,
+            'authenticated': False,
+            'error': 'Cloud manager not initialized'
+        })
+    
+    queue_status = cloud_manager.get_queue_status()
+    storage_info = cloud_manager.get_storage_info()
+    
+    return jsonify({
+        'enabled': True,
+        'authenticated': cloud_manager.is_ready(),
+        'provider': queue_status.get('provider', ''),
+        'queue': queue_status,
+        'storage': storage_info,
+    })
+
+
+@app.route('/api/cloud/test-connection', methods=['POST'])
+async def test_cloud_connection():
+    """Test cloud connection with provided credentials."""
+    try:
+        data = request.get_json()
+        provider = data.get('provider', 'warcraft_recorder')
+        
+        if provider != 'warcraft_recorder':
+            return jsonify({'error': 'Only Warcraft Recorder supported currently'}), 400
+        
+        username = data.get('username')
+        password = data.get('password')
+        guild = data.get('guild')
+        
+        if not username or not password or not guild:
+            return jsonify({'error': 'Missing credentials'}), 400
+        
+        from cloud_upload import WarcraftRecorderCloud
+        
+        test_provider = WarcraftRecorderCloud(username, password, guild)
+        success = await test_provider.authenticate()
+        
+        if success:
+            storage_info = test_provider.get_storage_info()
+            return jsonify({
+                'success': True,
+                'message': 'Connection successful',
+                'storage': storage_info,
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Authentication failed'
+            }), 401
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/cloud/reinitialize', methods=['POST'])
+async def reinitialize_cloud():
+    """Reinitialize cloud manager with current config."""
+    global cloud_manager
+    
+    try:
+        if cloud_manager:
+            await cloud_manager.shutdown()
+        
+        await init_cloud_manager()
+        
+        if cloud_manager and cloud_manager.is_ready():
+            return jsonify({
+                'success': True,
+                'message': 'Cloud manager reinitialized successfully'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to initialize cloud manager'
+            }), 500
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/recordings/<path:filename>/upload', methods=['POST'])
+def manual_upload_recording(filename: str):
+    """Manually trigger upload for a specific recording."""
+    if not cloud_manager or not cloud_manager.is_ready():
+        return jsonify({'error': 'Cloud upload not available'}), 503
+    
+    try:
+        record_dir = get_recording_directory()
+        if not record_dir:
+            return jsonify({'error': 'Recording directory not available'}), 500
+        
+        file_path = (record_dir / filename).resolve()
+        
+        if not file_path.is_relative_to(record_dir.resolve()):
+            return jsonify({'error': 'Invalid path'}), 403
+        
+        if not file_path.exists():
+            return jsonify({'error': 'File not found'}), 404
+        
+        # Parse metadata from filename
+        stem = file_path.stem
+        parts = stem.split('_')
+        
+        boss_name = None
+        difficulty = None
+        if len(parts) >= 4:
+            boss_name = parts[2]
+            difficulty = parts[3]
+        
+        success = cloud_manager.queue_upload(
+            file_path=file_path,
+            boss_name=boss_name,
+            difficulty=difficulty,
+            category='manual',
+        )
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'message': f'Queued {filename} for upload'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to queue upload'
+            }), 500
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 
 # -----------------------------------------------------------------------------
 # WebSocket Events
@@ -364,6 +554,55 @@ def build_status() -> dict:
         'log_monitor': monitor_state,
     }
 
+def broadcast_cloud_status():
+    """Broadcast current cloud upload status to all clients."""
+    if not cloud_manager:
+        status = {
+            'enabled': False,
+            'authenticated': False,
+        }
+    else:
+        queue_status = cloud_manager.get_queue_status()
+        storage_info = cloud_manager.get_storage_info()
+        
+        status = {
+            'enabled': True,
+            'authenticated': cloud_manager.is_ready(),
+            'provider': queue_status.get('provider', ''),
+            'queue_size': queue_status.get('queue_size', 0),
+            'active_upload': queue_status.get('active_upload'),
+            'completed_count': queue_status.get('completed_count', 0),
+            'failed_count': queue_status.get('failed_count', 0),
+            'storage': storage_info if storage_info else None,
+        }
+    
+    socketio.emit('cloud_status', status)
+
+
+def broadcast_upload_progress(progress: UploadProgress):
+    """Broadcast upload progress to all clients."""
+    data = {
+        'video_name': progress.video_name,
+        'progress_percent': round(progress.progress_percent, 1),
+        'uploaded_mb': round(progress.uploaded_bytes / (1024**2), 1),
+        'total_mb': round(progress.total_bytes / (1024**2), 1),
+        'upload_speed': format_upload_speed(progress.upload_speed),
+        'status': progress.status,
+        'error': progress.error,
+    }
+    
+    socketio.emit('upload_progress', data)
+
+
+def format_upload_speed(bytes_per_sec: float) -> str:
+    """Format upload speed for display."""
+    if bytes_per_sec < 1024:
+        return f"{bytes_per_sec:.0f} B/s"
+    elif bytes_per_sec < 1024**2:
+        return f"{bytes_per_sec / 1024:.1f} KB/s"
+    else:
+        return f"{bytes_per_sec / (1024**2):.1f} MB/s"
+
 # -----------------------------------------------------------------------------
 # Status Broadcast Loop
 # -----------------------------------------------------------------------------
@@ -371,6 +610,7 @@ def build_status() -> dict:
 def status_broadcast_loop():
     """Background thread that broadcasts status updates."""
     last_status = None
+    last_cloud_broadcast = 0
 
     while not shutdown_event.is_set():
         try:
@@ -394,11 +634,17 @@ def status_broadcast_loop():
             elif status['recorder'].get('recording'):
                 # Keep updating duration while recording even if status_key unchanged
                 socketio.emit('status', status)
+            # Cloud stuff    
+            current_time = time.time()
+            if current_time - last_cloud_broadcast >= 5:
+                broadcast_cloud_status()
+                last_cloud_broadcast = current_time
 
         except Exception as e:
             print(f"{LOG_PREFIXES['WEBSOCKET']} Error: {e}")
 
         shutdown_event.wait(STATUS_BROADCAST_INTERVAL)
+
 
 
 # -----------------------------------------------------------------------------
@@ -421,6 +667,51 @@ def handle_recording_saved():
     """Handle recording saved event - notify clients to refresh recordings list."""
     socketio.emit('recordings_updated')
 
+    if cloud_manager and cloud_manager.is_ready() and combat_parser:
+        state = state_manager.summary()
+        
+        if should_auto_upload(config_manager, state.get('recording_duration', 0)):
+            # Get the latest recording
+            try:
+                recordings = list_recording_files()
+                if recordings:
+                    latest = recordings[0]  # Already sorted by modified time
+                    record_dir = get_recording_directory()
+                    file_path = record_dir / latest['name']
+                    
+                    cloud_manager.queue_upload(
+                        file_path=file_path,
+                        boss_name=state.get('boss_name'),
+                        difficulty=state.get('difficulty_id'),
+                        duration=state.get('recording_duration'),
+                        result='kill' if state.get('encounter_active') else 'wipe',
+                        category='dungeon' if state.get('dungeon_active') else 'raid',
+                    )
+                    
+                    print(f"[Cloud] Queued for upload: {file_path.name}")
+            except Exception as e:
+                print(f"[Cloud] Error queuing upload: {e}")    
+
+async def init_cloud_manager():
+    """Initialize cloud upload manager asynchronously."""
+    global cloud_manager
+    
+    if not config_manager.CLOUD_UPLOAD_ENABLED:
+        print("[Cloud] Cloud upload disabled in config")
+        return
+    
+    try:
+        cloud_manager = await initialize_cloud_upload(config_manager)
+        
+        if cloud_manager:
+            cloud_manager.set_progress_callback(broadcast_upload_progress)
+            print("[Cloud] ✅ Cloud manager initialized")
+        else:
+            print("[Cloud] ❌ Failed to initialize cloud manager")
+    except Exception as e:
+        print(f"[Cloud] ❌ Initialization error: {e}")
+        import traceback
+        traceback.print_exc()
 
 # -----------------------------------------------------------------------------
 # Recorder Initialization
@@ -464,6 +755,8 @@ def init_recorder(config_path: Path) -> bool:
             print(f"   Please update 'log_dir' in your config.ini")
             print(f"")
 
+        asyncio.run(init_cloud_manager())
+
         recorder_running = True
         return True
 
@@ -473,7 +766,7 @@ def init_recorder(config_path: Path) -> bool:
 
 def shutdown_recorder():
     """Clean shutdown of recorder components."""
-    global recorder_running
+    global recorder_running, cloud_manager
 
     print("[RECORDER] Shutting down...")
     recorder_running = False
@@ -481,10 +774,19 @@ def shutdown_recorder():
     if log_monitor:
         log_monitor.stop()
 
+    # ADD THIS: Shutdown cloud manager
+    if cloud_manager:
+        print("[Cloud] Shutting down cloud manager...")
+        try:
+            asyncio.run(cloud_manager.shutdown())
+        except Exception as e:
+            print(f"[Cloud] Error during shutdown: {e}")
+
     if obs_client:
         obs_client.disconnect()
 
     print("[RECORDER] Shutdown complete")
+
 
 
 # -----------------------------------------------------------------------------
