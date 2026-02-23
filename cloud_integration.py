@@ -40,42 +40,29 @@ class CloudUploadManager:
         print("[Cloud Manager] Initialized")
     
     async def initialize(self) -> bool:
-        """
-        Initialize cloud upload provider based on configuration.
-        
-        Returns:
-            True if initialization successful, False otherwise
-        """
         if not self.config.CLOUD_UPLOAD_ENABLED:
             print("[Cloud Manager] Cloud upload is disabled in config")
             return False
-        
+
         provider_name = self.config.CLOUD_UPLOAD_PROVIDER
-        
-        # Initialize provider based on config
+
         if provider_name == 'warcraft_recorder':
             success = await self._init_warcraft_recorder()
-        elif provider_name == 'google_drive':
-            print("[Cloud Manager] Google Drive not yet implemented")
-            return False
-        elif provider_name == 'proton_drive':
-            print("[Cloud Manager] Proton Drive not yet implemented")
-            return False
         else:
-            print(f"[Cloud Manager] Unknown provider: {provider_name}")
+            print(f"[Cloud Manager] Unknown/unsupported provider: {provider_name}")
             return False
-        
+
         if success:
-            # Initialize upload queue
             self.upload_queue = CloudUploadQueue(self.provider)
+
             if self.progress_callback:
                 self.upload_queue.add_progress_callback(self.progress_callback)
-            
-            # Start queue processing in background
-            self._start_queue_processor()
-            
+
+            # Start the persistent worker thread (replaces the old _start_queue_processor)
+            self.upload_queue.start()
+
             print("[Cloud Manager] ✅ Cloud upload initialized and ready")
-        
+
         return success
     
     async def _init_warcraft_recorder(self) -> bool:
@@ -102,81 +89,29 @@ class CloudUploadManager:
         
         return authenticated
     
-    def _start_queue_processor(self):
-        """Start the upload queue processor in a background thread."""
-        if self.upload_thread and self.upload_thread.is_alive():
-            print("[Cloud Manager] Queue processor already running")
-            return
-        
-        def run_async_loop():
-            """Run asyncio event loop in background thread."""
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            self.event_loop = loop
-            
-            try:
-                loop.run_until_complete(self.upload_queue.process_queue())
-            finally:
-                loop.close()
-        
-        self.upload_thread = Thread(target=run_async_loop, daemon=True)
-        self.upload_thread.start()
-        print("[Cloud Manager] Queue processor started")
-    
-    def queue_upload(
-        self,
-        file_path: Path,
-        boss_name: Optional[str] = None,
-        difficulty: Optional[str] = None,
-        duration: Optional[float] = None,
-        encounter_id: Optional[int] = None,
-        start_time: Optional[str] = None,
-        result: Optional[str] = None,
-        category: str = 'raid'
-    ) -> bool:
+    def queue_upload(self, file_path: Path, metadata: 'VideoMetadata') -> bool:
         """
         Queue a recording for upload to cloud storage.
-        
+
         Args:
             file_path: Path to the recording file
-            boss_name: Name of the boss/encounter
-            difficulty: Difficulty level (Normal, Heroic, Mythic, etc.)
-            duration: Duration in seconds
-            encounter_id: Encounter ID
-            start_time: Start timestamp
-            result: Result ('kill' or 'wipe')
-            category: Category ('raid', 'dungeon', 'manual')
-            
+            metadata:  Fully populated VideoMetadata instance
+
         Returns:
             True if queued successfully, False otherwise
         """
         if not self.config.CLOUD_UPLOAD_ENABLED:
             return False
-        
+
         if not self.upload_queue:
             print("[Cloud Manager] Upload queue not initialized")
             return False
-        
-        # Build metadata
-        metadata = VideoMetadata(
-            video_name=file_path.name,
-            file_path=str(file_path),
-            file_size=file_path.stat().st_size,
-            boss_name=boss_name,
-            difficulty=difficulty,
-            duration=duration,
-            encounter_id=encounter_id,
-            start_time=start_time,
-            result=result,
-            category=category,
-        )
-        
-        # Add to queue
+
         success = self.upload_queue.add_to_queue(file_path, metadata)
-        
+
         if success:
             print(f"[Cloud Manager] ✅ Queued for upload: {file_path.name}")
-        
+
         return success
     
     def set_progress_callback(self, callback: Callable[[UploadProgress], None]):
@@ -222,19 +157,15 @@ class CloudUploadManager:
         )
     
     async def shutdown(self):
-        """Shutdown cloud upload manager gracefully."""
         print("[Cloud Manager] Shutting down...")
-        
-        if self.upload_queue and self.upload_queue.is_running:
-            print("[Cloud Manager] Waiting for active uploads to complete...")
-            # Wait for current upload to complete (max 5 minutes)
-            wait_time = 0
-            while self.upload_queue.is_running and wait_time < 300:
+        if self.upload_queue:
+            # Give any active upload up to 5 minutes to finish, then stop
+            wait = 0
+            while self.upload_queue._active and wait < 300:
                 await asyncio.sleep(1)
-                wait_time += 1
-        
+                wait += 1
+            self.upload_queue.stop()
         print("[Cloud Manager] Shutdown complete")
-
 
 # =============================================================================
 # Integration Helper Functions

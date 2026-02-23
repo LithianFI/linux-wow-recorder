@@ -466,16 +466,21 @@ class CombatParser:
     def _process_dungeon_end_thread(self, dungeon_info: DungeonInfo, duration: float, reason: str):
         """Thread function for ending dungeon recording."""
         result = self.processor.process_dungeon_end(
-            dungeon_info, 
-            duration, 
+            dungeon_info,
+            duration,
             reason,
             metadata=self.current_metadata if (self.config.GENERATE_METADATA_JSON or self.config.FILE_NAMING_SCHEME == 'wcr') else None,
             start_time=self.encounter_start_time
         )
 
-        # Notify frontend that recording was saved/processed
         if result and self.on_recording_saved:
-            self.on_recording_saved()
+            self.on_recording_saved({
+                'duration': duration,
+                'boss_name': f"{dungeon_info.name} +{dungeon_info.dungeon_level}",
+                'difficulty_id': 4,  # Mythic+
+                'is_kill': reason == 'dungeon_complete',
+                'category': 'dungeon',
+            })
 
     def _process_encounter_start_thread(self, boss_info: BossInfo):
         """Thread function for starting encounter recording."""
@@ -486,15 +491,20 @@ class CombatParser:
     def _process_encounter_end_thread(self, boss_info: BossInfo, duration: float):
         """Thread function for ending encounter recording."""
         result = self.processor.process_encounter_end(
-            boss_info, 
+            boss_info,
             duration,
             metadata=self.current_metadata if (self.config.GENERATE_METADATA_JSON or self.config.FILE_NAMING_SCHEME == 'wcr') else None,
             start_time=self.encounter_start_time
         )
 
-        # Notify frontend that recording was saved/processed
         if result and self.on_recording_saved:
-            self.on_recording_saved()
+            self.on_recording_saved({
+                'duration': duration,
+                'boss_name': boss_info.name,
+                'difficulty_id': boss_info.difficulty_id,
+                'is_kill': self.current_metadata.result,
+                'category': 'raid',
+            })
 
     def _start_thread(self, target: Callable, *args):
         """Helper to start a background thread."""

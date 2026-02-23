@@ -663,34 +663,57 @@ def handle_combat_event(event: dict):
     socketio.emit('combat_event', event)
 
 
-def handle_recording_saved():
+def handle_recording_saved(recording_info: dict = None):
     """Handle recording saved event - notify clients to refresh recordings list."""
     socketio.emit('recordings_updated')
 
-    if cloud_manager and cloud_manager.is_ready() and combat_parser:
-        state = state_manager.summary()
-        
-        if should_auto_upload(config_manager, state.get('recording_duration', 0)):
-            # Get the latest recording
-            try:
-                recordings = list_recording_files()
-                if recordings:
-                    latest = recordings[0]  # Already sorted by modified time
-                    record_dir = get_recording_directory()
-                    file_path = record_dir / latest['name']
-                    
-                    cloud_manager.queue_upload(
-                        file_path=file_path,
-                        boss_name=state.get('boss_name'),
-                        difficulty=state.get('difficulty_id'),
-                        duration=state.get('recording_duration'),
-                        result='kill' if state.get('encounter_active') else 'wipe',
-                        category='dungeon' if state.get('dungeon_active') else 'raid',
-                    )
-                    
-                    print(f"[Cloud] Queued for upload: {file_path.name}")
-            except Exception as e:
-                print(f"[Cloud] Error queuing upload: {e}")    
+    if not (cloud_manager and cloud_manager.is_ready() and combat_parser):
+        return
+
+    info = recording_info or {}
+    duration = info.get('duration', 0)
+
+    if not should_auto_upload(config_manager, duration):
+        return
+
+    try:
+        recordings = list_recording_files()
+        if not recordings:
+            print("[Cloud] No recordings found to upload")
+            return
+
+        record_dir = get_recording_directory()
+        if not record_dir:
+            print("[Cloud] Could not determine recording directory")
+            return
+
+        file_path = record_dir / recordings[0]['name']
+        stem = file_path.stem  # filename without extension
+
+        # Build VideoMetadata with fields matching the rewritten dataclass
+        import hashlib, time as _time
+        unique_hash = hashlib.md5(f"{stem}_{_time.time()}".encode()).hexdigest()
+
+        from cloud_upload import VideoMetadata
+        metadata = VideoMetadata(
+            video_name=stem,
+            video_key=file_path.name,
+            file_path=str(file_path),
+            file_size=file_path.stat().st_size,
+            start=int(_time.time() * 1000),
+            unique_hash=unique_hash,
+            category='dungeon' if info.get('category') == 'dungeon' else 'Raids',
+            encounter_name=info.get('boss_name'),
+            difficulty_id=info.get('difficulty_id'),
+            duration=int(duration),
+            result=bool(info.get('is_kill', False)),
+        )
+
+        cloud_manager.queue_upload(file_path=file_path, metadata=metadata)
+        print(f"[Cloud] Queued for upload: {file_path.name}")
+
+    except Exception as e:
+        print(f"[Cloud] Error queuing upload: {e}")
 
 async def init_cloud_manager():
     """Initialize cloud upload manager asynchronously."""
