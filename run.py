@@ -340,6 +340,32 @@ def serve_video(filename: str):
 
     return send_file(file_path)
 
+@app.route('/api/recordings/<path:filename>/metadata')
+def get_recording_metadata(filename: str):
+    """Return the companion JSON metadata for a recording, if it exists."""
+    record_dir = get_recording_directory()
+    if not record_dir:
+        return jsonify({'error': 'Recording directory not available'}), 500
+
+    # Build the path to the video file and check it's inside record_dir
+    video_path = (record_dir / filename).resolve()
+    if not video_path.is_relative_to(record_dir.resolve()):
+        return jsonify({'error': 'Invalid path'}), 403
+
+    # Companion JSON sits next to the video with the same stem
+    json_path = video_path.with_suffix('.json')
+
+    if not json_path.exists():
+        return jsonify({'error': 'No metadata found'}), 404
+
+    try:
+        with open(json_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        return jsonify(data)
+    except Exception as e:
+        print(f"[RECORDINGS] Error reading metadata for {filename}: {e}")
+        return jsonify({'error': str(e)}), 500
+
 # ============================================================================
 # Cloud Upload API Routes
 # ============================================================================

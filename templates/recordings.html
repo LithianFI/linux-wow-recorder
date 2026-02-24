@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,30 +9,38 @@
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
-        [x-cloak] { display: none !important; }
+        [x-cloak] {
+            display: none !important;
+        }
+
         .custom-scrollbar::-webkit-scrollbar {
             width: 6px;
         }
+
         .custom-scrollbar::-webkit-scrollbar-track {
             background: rgb(55 65 81);
             border-radius: 3px;
         }
+
         .custom-scrollbar::-webkit-scrollbar-thumb {
             background: rgb(107 114 128);
             border-radius: 3px;
         }
+
         .custom-scrollbar::-webkit-scrollbar-thumb:hover {
             background: rgb(156 163 175);
         }
     </style>
 </head>
+
 <body class="bg-gray-900 text-gray-100 min-h-screen">
     <div x-data="recordingsPage()" class="container mx-auto px-4 py-8 max-w-6xl">
         <header class="mb-8 flex items-center justify-between">
             <div class="flex items-center gap-4">
                 <a href="/" class="p-2 text-gray-400 hover:text-amber-500 transition-colors" title="Back to Dashboard">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
                     </svg>
                 </a>
                 <div>
@@ -39,10 +48,12 @@
                     <p class="text-gray-400 mt-1" x-text="directory || 'Loading...'"></p>
                 </div>
             </div>
-            <button @click="fetchRecordings()"
-                    class="p-2 text-gray-400 hover:text-amber-500 transition-colors" title="Refresh">
+            <button @click="fetchRecordings()" class="p-2 text-gray-400 hover:text-amber-500 transition-colors"
+                title="Refresh">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
+                    </path>
                 </svg>
             </button>
         </header>
@@ -58,15 +69,21 @@
                     <p class="text-gray-500">No recordings found</p>
                 </div>
 
-                <div x-show="recordings.length > 0" class="space-y-2 max-h-[600px] overflow-y-auto custom-scrollbar pr-2">
+                <div x-show="recordings.length > 0"
+                    class="space-y-2 max-h-[600px] overflow-y-auto custom-scrollbar pr-2">
                     <template x-for="(rec, idx) in recordings" :key="rec.name">
                         <div @click="selectRecording(rec)"
-                             class="flex items-center justify-between py-3 px-3 rounded-lg cursor-pointer transition-colors"
-                             :class="selectedRecording?.name === rec.name ? 'bg-amber-500/20 border border-amber-500/50' : 'bg-gray-700/30 hover:bg-gray-700/50'">
+                            class="flex items-center justify-between py-3 px-3 rounded-lg cursor-pointer transition-colors"
+                            :class="selectedRecording?.name === rec.name ? 'bg-amber-500/20 border border-amber-500/50' : 'bg-gray-700/30 hover:bg-gray-700/50'">
                             <div class="flex items-center gap-3 min-w-0 flex-1">
-                                <svg class="w-8 h-8 shrink-0" :class="selectedRecording?.name === rec.name ? 'text-amber-400' : 'text-gray-500'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                <svg class="w-8 h-8 shrink-0"
+                                    :class="selectedRecording?.name === rec.name ? 'text-amber-400' : 'text-gray-500'"
+                                    fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z">
+                                    </path>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                                 </svg>
                                 <div class="min-w-0">
                                     <p class="text-gray-200 truncate" x-text="rec.name"></p>
@@ -78,9 +95,11 @@
                                 </div>
                             </div>
                             <button @click.stop="confirmDelete(rec)"
-                                    class="p-2 text-gray-500 hover:text-red-400 transition-colors shrink-0">
+                                class="p-2 text-gray-500 hover:text-red-400 transition-colors shrink-0">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16">
+                                    </path>
                                 </svg>
                             </button>
                         </div>
@@ -91,21 +110,130 @@
             <section class="bg-gray-800 rounded-lg p-6">
                 <h2 class="text-lg font-semibold text-gray-300 mb-4">Preview</h2>
 
+                <!-- Empty state -->
                 <div x-show="!selectedRecording" class="text-center py-16">
-                    <svg class="w-16 h-16 mx-auto text-gray-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                    <svg class="w-16 h-16 mx-auto text-gray-600 mb-4" fill="none" stroke="currentColor"
+                        viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z">
+                        </path>
                     </svg>
                     <p class="text-gray-500">Select a recording to preview</p>
                 </div>
 
                 <div x-show="selectedRecording" x-cloak>
-                    <div class="aspect-video bg-black rounded-lg overflow-hidden mb-4">
-                        <video x-ref="videoPlayer"
-                               class="w-full h-full"
-                               controls
-                               :src="selectedRecording ? '/video/' + encodeURIComponent(selectedRecording.name) : ''">
-                        </video>
+
+                    <!-- Video + custom controls wrapper -->
+                    <div class="mb-4">
+
+                        <!-- Video element (no native controls) -->
+                        <div class="aspect-video bg-black rounded-t-lg overflow-hidden">
+                            <video x-ref="videoPlayer" class="w-full h-full"
+                                :src="selectedRecording ? '/video/' + encodeURIComponent(selectedRecording.name) : ''"
+                                @timeupdate="onTimeUpdate()" @loadedmetadata="onVideoLoaded()"
+                                @ended="isPlaying = false" @pause="isPlaying = false" @play="isPlaying = true">
+                            </video>
+                        </div>
+
+                        <!-- Custom controls bar -->
+                        <div class="bg-gray-900 rounded-b-lg px-3 pt-2 pb-3 select-none">
+
+                            <!-- Timeline -->
+                            <div class="relative h-5 flex items-center mb-2 group cursor-pointer"
+                                @click="seekTo($event)" @mousemove="previewSeek($event)"
+                                @mouseleave="seekPreviewTime = null" x-ref="timeline">
+
+                                <!-- Track background -->
+                                <div class="absolute inset-x-0 h-1.5 bg-gray-700 rounded-full"></div>
+
+                                <!-- Played portion -->
+                                <div class="absolute left-0 h-1.5 bg-amber-500 rounded-full pointer-events-none"
+                                    :style="'width:' + playedPercent + '%'"></div>
+
+                                <!-- Death markers -->
+                                <template x-for="(pct, i) in deathMarkerPositions" :key="i">
+                                    <div class="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 group/marker"
+                                        :style="'left:' + pct + '%'">
+                                        <!-- Skull icon -->
+                                        <div class="w-4 h-4 rounded-full bg-red-600 border-2 border-red-300 flex items-center justify-center shadow-lg
+                                        opacity-80 group-hover/marker:opacity-100 transition-opacity cursor-pointer"
+                                            @click.stop="seekToMarker(pct)">
+                                            <span class="text-[9px] leading-none">💀</span>
+                                        </div>
+                                        <!-- Tooltip -->
+                                        <div
+                                            class="absolute bottom-6 left-1/2 -translate-x-1/2 bg-gray-900 text-gray-200
+                                        text-xs rounded px-2 py-1 whitespace-nowrap pointer-events-none
+                                        opacity-0 group-hover/marker:opacity-100 transition-opacity border border-gray-700 shadow-xl">
+                                            <span x-text="formatVideoTime(deathTimesSeconds[i])"></span>
+                                            <template x-if="deathNames[i]">
+                                                <span x-text="' – ' + deathNames[i]"></span>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </template>
+
+                                <!-- Seek preview thumb -->
+                                <div x-show="seekPreviewTime !== null" class="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3
+                                bg-white rounded-full pointer-events-none shadow"
+                                    :style="'left:' + seekPreviewPercent + '%'"></div>
+                            </div>
+
+                            <!-- Time + buttons row -->
+                            <div class="flex items-center gap-3">
+
+                                <!-- Play/Pause -->
+                                <button @click="togglePlay()" class="text-gray-300 hover:text-white transition-colors">
+                                    <svg x-show="!isPlaying" class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M8 5v14l11-7z" />
+                                    </svg>
+                                    <svg x-show="isPlaying" class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                                    </svg>
+                                </button>
+
+                                <!-- Volume -->
+                                <button @click="toggleMute()" class="text-gray-300 hover:text-white transition-colors">
+                                    <svg x-show="!isMuted" class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                                        <path
+                                            d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z" />
+                                    </svg>
+                                    <svg x-show="isMuted" class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                                        <path
+                                            d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" />
+                                    </svg>
+                                </button>
+
+                                <!-- Current / duration -->
+                                <span class="text-xs text-gray-400 tabular-nums">
+                                    <span x-text="formatVideoTime(currentTime)"></span>
+                                    <span class="text-gray-600"> / </span>
+                                    <span x-text="formatVideoTime(duration)"></span>
+                                </span>
+
+                                <div class="flex-1"></div>
+
+                                <!-- Death count badge -->
+                                <template x-if="deathMarkerPositions.length > 0">
+                                    <span class="text-xs bg-red-600/30 text-red-400 border border-red-600/40
+                                     rounded-full px-2 py-0.5 flex items-center gap-1">
+                                        💀 <span x-text="deathMarkerPositions.length"></span>
+                                    </span>
+                                </template>
+
+                                <!-- Fullscreen -->
+                                <button @click="$refs.videoPlayer.requestFullscreen()"
+                                    class="text-gray-300 hover:text-white transition-colors">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
                     </div>
+
+                    <!-- File info -->
                     <div class="space-y-2">
                         <p class="text-gray-200 font-medium truncate" x-text="selectedRecording?.name"></p>
                         <div class="flex items-center gap-4 text-sm text-gray-400">
@@ -113,154 +241,267 @@
                             <span x-text="formatFullDate(selectedRecording?.modified)"></span>
                         </div>
                         <div class="flex gap-2 mt-4">
-                            <a :href="'/video/' + encodeURIComponent(selectedRecording?.name || '')"
-                               target="_blank"
-                               class="flex-1 py-2 px-4 bg-gray-700 hover:bg-gray-600 rounded-lg text-center transition-colors">
+                            <a :href="'/video/' + encodeURIComponent(selectedRecording?.name || '')" target="_blank"
+                                class="flex-1 py-2 px-4 bg-gray-700 hover:bg-gray-600 rounded-lg text-center transition-colors">
                                 Open in New Tab
                             </a>
                             <button @click="confirmDelete(selectedRecording)"
-                                    class="py-2 px-4 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition-colors">
+                                class="py-2 px-4 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition-colors">
                                 Delete
                             </button>
                         </div>
                     </div>
                 </div>
             </section>
-        </div>
 
-        <div x-show="showDeleteModal" x-cloak
-             class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-             @click.self="showDeleteModal = false">
-            <div class="bg-gray-800 rounded-lg p-6 max-w-md mx-4">
-                <h3 class="text-lg font-semibold text-gray-200 mb-2">Delete Recording?</h3>
-                <p class="text-gray-400 mb-4">
-                    Are you sure you want to delete
-                    <span class="text-gray-200" x-text="deleteTarget?.name"></span>?
-                    This cannot be undone.
-                </p>
-                <div class="flex gap-3 justify-end">
-                    <button @click="showDeleteModal = false"
+            <div x-show="showDeleteModal" x-cloak
+                class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+                @click.self="showDeleteModal = false">
+                <div class="bg-gray-800 rounded-lg p-6 max-w-md mx-4">
+                    <h3 class="text-lg font-semibold text-gray-200 mb-2">Delete Recording?</h3>
+                    <p class="text-gray-400 mb-4">
+                        Are you sure you want to delete
+                        <span class="text-gray-200" x-text="deleteTarget?.name"></span>?
+                        This cannot be undone.
+                    </p>
+                    <div class="flex gap-3 justify-end">
+                        <button @click="showDeleteModal = false"
                             class="py-2 px-4 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors">
-                        Cancel
-                    </button>
-                    <button @click="deleteRecording()"
+                            Cancel
+                        </button>
+                        <button @click="deleteRecording()"
                             class="py-2 px-4 bg-red-500 hover:bg-red-600 rounded-lg transition-colors">
-                        Delete
-                    </button>
+                            Delete
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
 
-    <script>
-        function recordingsPage() {
-            return {
-                recordings: [],
-                directory: null,
-                selectedRecording: null,
-                showDeleteModal: false,
-                deleteTarget: null,
-                socket: null,
+        <script>
 
-                init() {
-                    this.fetchRecordings();
-                    this.connectSocket();
-                },
+            function recordingsPage() {
+                return {
+                    recordings: [],
+                    directory: null,
+                    selectedRecording: null,
+                    showDeleteModal: false,
+                    deleteTarget: null,
+                    socket: null,
+                    isPlaying: false,
+                    isMuted: false,
+                    currentTime: 0,
+                    duration: 0,
+                    playedPercent: 0,
+                    seekPreviewTime: null,
+                    seekPreviewPercent: 0,
+                    recordingMetadata: null,
+                    deathMarkerPositions: [],   // percent positions on timeline
+                    deathTimesSeconds: [],      // seconds from video start, for tooltip
+                    deathNames: [],             // player names, for tooltip
 
-                connectSocket() {
-                    this.socket = io();
-                    this.socket.on('recordings_updated', () => {
+                    init() {
                         this.fetchRecordings();
-                    });
-                },
+                        this.connectSocket();
+                    },
 
-                async fetchRecordings() {
-                    try {
-                        const res = await fetch('/api/recordings');
-                        const data = await res.json();
-                        this.recordings = data.recordings || [];
-                        this.directory = data.directory;
+                    connectSocket() {
+                        this.socket = io();
+                        this.socket.on('recordings_updated', () => {
+                            this.fetchRecordings();
+                        });
+                    },
 
-                        if (this.selectedRecording) {
-                            const stillExists = this.recordings.find(r => r.name === this.selectedRecording.name);
-                            if (!stillExists) {
-                                this.selectedRecording = null;
+                    async fetchRecordings() {
+                        try {
+                            const res = await fetch('/api/recordings');
+                            const data = await res.json();
+                            this.recordings = data.recordings || [];
+                            this.directory = data.directory;
+
+                            if (this.selectedRecording) {
+                                const stillExists = this.recordings.find(r => r.name === this.selectedRecording.name);
+                                if (!stillExists) {
+                                    this.selectedRecording = null;
+                                }
                             }
+                        } catch (e) {
+                            console.error('Failed to fetch recordings:', e);
                         }
-                    } catch (e) {
-                        console.error('Failed to fetch recordings:', e);
-                    }
-                },
+                    },
 
-                selectRecording(rec) {
-                    this.selectedRecording = rec;
-                    this.$nextTick(() => {
-                        if (this.$refs.videoPlayer) {
-                            this.$refs.videoPlayer.load();
-                        }
-                    });
-                },
+                    async selectRecording(rec) {
+                        this.selectedRecording = rec;
+                        this.recordingMetadata = null;
+                        this.deathMarkerPositions = [];
+                        this.deathTimesSeconds = [];
+                        this.deathNames = [];
+                        this.currentTime = 0;
+                        this.duration = 0;
+                        this.playedPercent = 0;
 
-                confirmDelete(rec) {
-                    this.deleteTarget = rec;
-                    this.showDeleteModal = true;
-                },
-
-                async deleteRecording() {
-                    if (!this.deleteTarget) return;
-
-                    try {
-                        const res = await fetch('/api/recordings/' + encodeURIComponent(this.deleteTarget.name), {
-                            method: 'DELETE'
+                        this.$nextTick(() => {
+                            if (this.$refs.videoPlayer) {
+                                this.$refs.videoPlayer.load();
+                            }
                         });
 
-                        if (res.ok) {
-                            if (this.selectedRecording?.name === this.deleteTarget.name) {
-                                this.selectedRecording = null;
+                        // Fetch companion metadata
+                        try {
+                            const res = await fetch('/api/recordings/' + encodeURIComponent(rec.name) + '/metadata');
+                            if (res.ok) {
+                                this.recordingMetadata = await res.json();
+                                this.buildDeathMarkers(); // ← build markers once metadata arrives
                             }
-                            await this.fetchRecordings();
-                        } else {
-                            const data = await res.json();
-                            alert('Failed to delete: ' + (data.error || 'Unknown error'));
+                        } catch (e) {
+                            console.warn('No metadata for', rec.name);
                         }
-                    } catch (e) {
-                        console.error('Failed to delete recording:', e);
-                        alert('Failed to delete recording');
+                    },
+                    confirmDelete(rec) {
+                        this.deleteTarget = rec;
+                        this.showDeleteModal = true;
+                    },
+
+                    async deleteRecording() {
+                        if (!this.deleteTarget) return;
+
+                        try {
+                            const res = await fetch('/api/recordings/' + encodeURIComponent(this.deleteTarget.name), {
+                                method: 'DELETE'
+                            });
+
+                            if (res.ok) {
+                                if (this.selectedRecording?.name === this.deleteTarget.name) {
+                                    this.selectedRecording = null;
+                                }
+                                await this.fetchRecordings();
+                            } else {
+                                const data = await res.json();
+                                alert('Failed to delete: ' + (data.error || 'Unknown error'));
+                            }
+                        } catch (e) {
+                            console.error('Failed to delete recording:', e);
+                            alert('Failed to delete recording');
+                        }
+
+                        this.showDeleteModal = false;
+                        this.deleteTarget = null;
+                    },
+
+                    formatFileSize(bytes) {
+                        if (!bytes) return '0 B';
+                        if (bytes < 1024) return bytes + ' B';
+                        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+                        if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+                        return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+                    },
+
+                    formatDate(timestamp) {
+                        if (!timestamp) return '';
+                        const date = new Date(timestamp * 1000);
+                        const now = new Date();
+                        const diff = now - date;
+
+                        if (diff < 60000) return 'Just now';
+                        if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
+                        if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
+                        if (diff < 604800000) return Math.floor(diff / 86400000) + 'd ago';
+
+                        return date.toLocaleDateString();
+                    },
+                    onVideoLoaded() {
+                        this.duration = this.$refs.videoPlayer.duration || 0;
+                        this.buildDeathMarkers();
+                    },
+
+                    buildDeathMarkers() {
+                        this.deathMarkerPositions = [];
+                        this.deathTimesSeconds = [];
+                        this.deathNames = [];
+
+                        const meta = this.recordingMetadata;
+                        if (!meta || !meta.deaths || meta.deaths.length === 0) return;
+                        if (!meta.start || !meta.duration) return;
+
+                        const durationMs = meta.duration * 1000;
+
+                        meta.deaths.forEach((death, i) => {
+                            const deathMs = typeof death === 'object' ? death.timestamp : death;
+                            const offsetMs = deathMs - meta.start;
+                            if (offsetMs < 0 || offsetMs > durationMs) return;
+
+                            const pct = (offsetMs / durationMs) * 100;
+                            const secs = offsetMs / 1000;
+
+                            this.deathMarkerPositions.push(pct);
+                            this.deathTimesSeconds.push(secs);
+
+                            // Try to get player name from deaths array (if stored as objects)
+                            // Falls back to empty string if just a timestamp number
+                            const name = typeof death === 'object' ? (death.name || '') : '';
+                            this.deathNames.push(name);
+                        });
+                    },
+
+                    onTimeUpdate() {
+                        const v = this.$refs.videoPlayer;
+                        if (!v) return;
+                        this.currentTime = v.currentTime;
+                        this.playedPercent = this.duration ? (v.currentTime / this.duration) * 100 : 0;
+                    },
+
+                    togglePlay() {
+                        const v = this.$refs.videoPlayer;
+                        if (!v) return;
+                        v.paused ? v.play() : v.pause();
+                    },
+
+                    toggleMute() {
+                        const v = this.$refs.videoPlayer;
+                        if (!v) return;
+                        v.muted = !v.muted;
+                        this.isMuted = v.muted;
+                    },
+
+                    seekTo(event) {
+                        const v = this.$refs.videoPlayer;
+                        const bar = this.$refs.timeline;
+                        if (!v || !bar || !this.duration) return;
+                        const rect = bar.getBoundingClientRect();
+                        const pct = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+                        v.currentTime = pct * this.duration;
+                    },
+
+                    seekToMarker(pct) {
+                        const v = this.$refs.videoPlayer;
+                        if (!v || !this.duration) return;
+                        v.currentTime = (pct / 100) * this.duration;
+                    },
+
+                    previewSeek(event) {
+                        const bar = this.$refs.timeline;
+                        if (!bar || !this.duration) return;
+                        const rect = bar.getBoundingClientRect();
+                        const pct = Math.max(0, Math.min(100, ((event.clientX - rect.left) / rect.width) * 100));
+                        this.seekPreviewPercent = pct;
+                        this.seekPreviewTime = (pct / 100) * this.duration;
+                    },
+
+                    formatVideoTime(secs) {
+                        if (!secs && secs !== 0) return '0:00';
+                        const m = Math.floor(secs / 60);
+                        const s = Math.floor(secs % 60).toString().padStart(2, '0');
+                        return `${m}:${s}`;
+                    },
+
+                    formatFullDate(timestamp) {
+                        if (!timestamp) return '';
+                        const date = new Date(timestamp * 1000);
+                        return date.toLocaleString();
                     }
-
-                    this.showDeleteModal = false;
-                    this.deleteTarget = null;
-                },
-
-                formatFileSize(bytes) {
-                    if (!bytes) return '0 B';
-                    if (bytes < 1024) return bytes + ' B';
-                    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-                    if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-                    return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
-                },
-
-                formatDate(timestamp) {
-                    if (!timestamp) return '';
-                    const date = new Date(timestamp * 1000);
-                    const now = new Date();
-                    const diff = now - date;
-
-                    if (diff < 60000) return 'Just now';
-                    if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
-                    if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
-                    if (diff < 604800000) return Math.floor(diff / 86400000) + 'd ago';
-
-                    return date.toLocaleDateString();
-                },
-
-                formatFullDate(timestamp) {
-                    if (!timestamp) return '';
-                    const date = new Date(timestamp * 1000);
-                    return date.toLocaleString();
-                }
-            };
-        }
-    </script>
+                };
+            }
+        </script>
 </body>
+
 </html>

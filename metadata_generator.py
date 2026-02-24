@@ -72,10 +72,16 @@ class RecordingMetadata:
         if combatant not in self.combatants:
             self.combatants.append(combatant)
     
-    def add_death(self, player_guid: str, timestamp_ms: int):
-        """Add a player death event."""
-        # Deaths are just timestamps in WCR format
-        self.deaths.append(timestamp_ms)
+    def add_death(self, name: str, timestamp_ms: int):
+        """Add a player death event.
+
+        Stored as {"timestamp": ms, "name": "CharName"} so the frontend
+        can display named tooltips on the timeline death markers.
+        """
+        self.deaths.append({
+            "timestamp": timestamp_ms,
+            "name": name,
+        })
     
     def set_result(self, is_kill: bool, duration: float, boss_percent: float = 0):
         """Set encounter result."""

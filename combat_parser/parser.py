@@ -84,10 +84,13 @@ class CombatParser:
             self._handle_encounter_end(event)
 
         # Track deaths if enabled and in active encounter
-        if self.config.TRACK_PLAYER_DEATHS and self.state.encounter_active:
+        if self.config.TRACK_PLAYER_DEATHS and (self.state.encounter_active or self.state.dungeon_active):
             death_info = DeathParser.parse_death_line(line)
             if death_info:
-                self.encounter_deaths.append(death_info['timestamp'])
+                self.encounter_deaths.append({
+                    'timestamp': death_info['timestamp'],
+                    'name': death_info['name'],
+                })
                 print(f"{LOG_PREFIXES['PARSER']} 💀 Player death: {death_info['name']}")
 
         # Grab specID from COMBATANT_INFO once we know the player GUID
@@ -470,16 +473,17 @@ class CombatParser:
         if not (self.config.GENERATE_METADATA_JSON or self.config.FILE_NAMING_SCHEME == 'wcr'):
             return
 
-        # Set result
         self.current_metadata.set_result(
             is_kill=is_kill,
             duration=duration,
-            boss_percent=100 if is_kill else 0
+            boss_percent=100 if is_kill else 0,
         )
-        
-        # Add deaths
-        for death_time in self.encounter_deaths:
-            self.current_metadata.add_death('', death_time)
+
+        for death in self.encounter_deaths:
+            self.current_metadata.add_death(
+                name=death['name'],
+                timestamp_ms=death['timestamp'],
+            )
 
     def _parse_timestamp_to_ms(self, timestamp: str) -> int:
         """Parse combat log timestamp to milliseconds."""
