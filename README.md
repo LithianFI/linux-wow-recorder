@@ -8,7 +8,7 @@ What needs to be done:
 
 - ~~Config~~
 - ~~Frontend~~
-- Maybe attempt to integrate with WarcraftRecorder so that the replays are send to the cloud storage there
+- ~~Maybe attempt to integrate with WarcraftRecorder so that the replays are send to the cloud storage there~~ Implemented, but currently VODs aren't displayed properly in the webapp.
 
 I will work on this slowly, if anyone wants to contribute/fork/whatever they are welcome to.
 
