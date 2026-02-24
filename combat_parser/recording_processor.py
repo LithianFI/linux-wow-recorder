@@ -155,6 +155,12 @@ class RecordingProcessor:
         if new_path and metadata and self.config.GENERATE_METADATA_JSON:
             self._save_metadata_json(new_path, metadata)
         
+        # ── Move into date subfolder ──────────────────────────────
+        if new_path and getattr(self.config, 'ORGANIZE_BY_DATE', False):
+            organised = self.file_manager.organize_into_date_subfolder(new_path)
+            if organised:
+                new_path = organised
+        
         return new_path is not None
     
     def _rename_wcr_style(self, recording_path: Path, metadata: RecordingMetadata, 

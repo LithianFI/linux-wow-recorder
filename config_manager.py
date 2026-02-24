@@ -200,6 +200,8 @@ generate_metadata_json = false
 # Track player deaths in metadata
 track_player_deaths = false
 
+organize_by_date = false
+
 [Difficulties]
 # --- Raids ---
 record_lfr = false
@@ -357,6 +359,11 @@ proton_folder =
         if path_str and path_str.strip():
             return self._sanitize_path(path_str.strip())
         return None
+        
+    @property
+    def ORGANIZE_BY_DATE(self) -> bool:
+        """Move finished recordings into YYYY-MM-DD subfolders."""
+        return self.config.getboolean('Recording', 'organize_by_date', fallback=False)
     
     # Difficulty settings
     @property

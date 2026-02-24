@@ -109,6 +109,7 @@ def get_config():
             'file_naming_scheme': config_manager.FILE_NAMING_SCHEME,
             'generate_metadata_json': config_manager.GENERATE_METADATA_JSON,
             'track_player_deaths': config_manager.TRACK_PLAYER_DEATHS,
+            'organize_by_date': config_manager.ORGANIZE_BY_DATE,
         },
         'difficulties': {
             'record_lfr': config_manager.RECORD_LFR,
@@ -184,6 +185,8 @@ def save_config():
                 config_manager.config.set('Recording', 'generate_metadata_json', str(recording['generate_metadata_json']).lower())
             if 'track_player_deaths' in recording:
                 config_manager.config.set('Recording', 'track_player_deaths', str(recording['track_player_deaths']).lower())
+            if 'organize_by_date' in recording:
+                config_manager.config.set('Recording', 'organize_by_date', str(recording['organize_by_date']).lower())
 
         if 'difficulties' in data:
             difficulties = data['difficulties']
@@ -259,18 +262,19 @@ def get_recording_directory() -> Path:
 
 
 def list_recording_files() -> list:
-    """List all recording files in the recordings directory."""
+    """List all recording files in the recordings directory (including date subfolders)."""
     record_dir = get_recording_directory()
     if not record_dir or not record_dir.exists():
         return []
 
     ext = config_manager.RECORDING_EXTENSION.lower() if config_manager else '.mp4'
     recordings = []
-    for file in record_dir.iterdir():
-        if file.suffix.lower() == ext and file.is_file():
+
+    for file in record_dir.rglob(f'*{ext}'):        # ← rglob instead of iterdir
+        if file.is_file():
             stat = file.stat()
             recordings.append({
-                'name': file.name,
+                'name': str(file.relative_to(record_dir)),  # e.g. "2025-01-15/boss.mp4"
                 'size': stat.st_size,
                 'modified': stat.st_mtime,
             })

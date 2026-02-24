@@ -191,6 +191,21 @@
                         </button>
                     </div>
 
+                    <!-- Organize by Date Toggle -->
+                    <div class="flex items-center justify-between mb-4">
+                        <div>
+                            <label class="text-sm font-medium text-gray-300">Organize by Date</label>
+                            <p class="text-xs text-gray-500">Move recordings into YYYY-MM-DD subfolders after saving</p>
+                        </div>
+                        <button type="button"
+                            @click="config.recording.organize_by_date = !config.recording.organize_by_date"
+                            :class="config.recording.organize_by_date ? 'bg-amber-500' : 'bg-gray-600'"
+                            class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full transition-colors duration-200 ease-in-out">
+                            <span :class="config.recording.organize_by_date ? 'translate-x-5' : 'translate-x-0'"
+                                class="pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"></span>
+                        </button>
+                    </div>
+
 
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
@@ -506,6 +521,7 @@
                             file_naming_scheme: data.recording?.file_naming_scheme || 'simple',
                             generate_metadata_json: data.recording?.generate_metadata_json === true,
                             track_player_deaths: data.recording?.track_player_deaths === true,
+                            organize_by_date: data.recording?.organize_by_date === true,
                         };
                     } catch (error) {
                         this.showMessage('Failed to load configuration: ' + error.message, 'error');

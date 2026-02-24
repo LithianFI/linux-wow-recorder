@@ -275,3 +275,71 @@ class RecordingFileManager:
             return original_path
         
         return path
+
+    def organize_into_date_subfolder(self, file_path: Path) -> Optional[Path]:
+        """Move *file_path* (and its companion .json) into a YYYY-MM-DD subfolder.
+
+        The date is extracted from the filename when it starts with the
+        standard ``YYYY-MM-DD_`` prefix produced by :meth:`generate_filename`.
+        If the filename doesn't match, the file's modification time is used as
+        a fallback so no recording is ever left behind.
+
+        Returns the new :class:`~pathlib.Path` on success, or ``None`` on
+        failure (the original file is never deleted in that case).
+        """
+        if not file_path or not file_path.exists():
+            print(f"{LOG_PREFIXES['FILE']} organize_into_date_subfolder: file not found: {file_path}")
+            return None
+
+        # ── Determine the date ──────────────────────────────────────────
+        date_str: Optional[str] = None
+
+        # Filenames produced by generate_filename start with YYYY-MM-DD_
+        import re as _re
+        m = _re.match(r'^(\d{4}-\d{2}-\d{2})_', file_path.name)
+        if m:
+            date_str = m.group(1)
+        else:
+            # Fallback: use the file's last-modified timestamp
+            date_str = datetime.fromtimestamp(file_path.stat().st_mtime).strftime("%Y-%m-%d")
+
+        # ── Create the target directory ─────────────────────────────────
+        target_dir = file_path.parent / date_str
+        try:
+            target_dir.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            print(f"{LOG_PREFIXES['FILE']} Could not create date subfolder {target_dir}: {e}")
+            return None
+
+        # ── Move the video file ─────────────────────────────────────────
+        new_path = target_dir / file_path.name
+
+        # Avoid silent overwrites if a file with the same name already exists
+        if new_path.exists():
+            stem = file_path.stem
+            suffix = file_path.suffix
+            counter = 1
+            while new_path.exists():
+                new_path = target_dir / f"{stem}_{counter}{suffix}"
+                counter += 1
+
+        try:
+            file_path.rename(new_path)
+            print(f"{LOG_PREFIXES['FILE']} 📁 Organised into {date_str}/: {new_path.name}")
+        except Exception as e:
+            print(f"{LOG_PREFIXES['FILE']} Failed to move {file_path.name} → {target_dir}: {e}")
+            return None
+
+        # ── Move companion .json metadata (if present) ──────────────────
+        json_src = file_path.with_suffix('.json')
+        if json_src.exists():
+            json_dst = new_path.with_suffix('.json')
+            try:
+                json_src.rename(json_dst)
+                print(f"{LOG_PREFIXES['FILE']} 📁 Organised companion JSON: {json_dst.name}")
+            except Exception as e:
+                # Non-fatal — the video already moved successfully
+                print(f"{LOG_PREFIXES['FILE']} Warning: could not move companion JSON: {e}")
+
+        self.last_renamed_path = new_path
+        return new_path

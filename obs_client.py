@@ -245,44 +245,35 @@ class OBSClient:
         return self.connect()
     
     def _find_latest_recording(self, directory: str) -> dict:
-        """Find the most recent recording file in a directory.
-        
-        Args:
-            directory: Path to search for recordings
-            
-        Returns:
-            Dictionary with file information or empty dict if none found
-        """
+        """Find the most recent recording file in a directory (including date subfolders)."""
         from pathlib import Path
-        
+
         try:
             record_path = Path(directory)
             if not record_path.exists():
                 return {}
-            
-            # Common video file extensions
-            video_extensions = {'.mp4', '.mkv', '.flv', '.mov', '.ts', 
-                               '.m3u8', '.avi', '.wmv'}
-            
-            # Find all video files
-            video_files = []
-            for file in record_path.iterdir():
-                if file.suffix.lower() in video_extensions and file.is_file():
-                    video_files.append(file)
-            
+
+            video_extensions = {'.mp4', '.mkv', '.flv', '.mov', '.ts',
+                                 '.m3u8', '.avi', '.wmv'}
+
+            # rglob descends into date subfolders automatically
+            video_files = [
+                f for f in record_path.rglob('*')
+                if f.is_file() and f.suffix.lower() in video_extensions
+            ]
+
             if not video_files:
                 return {}
-            
-            # Get the most recently modified file
+
             latest_file = max(video_files, key=lambda f: f.stat().st_mtime)
-            
+
             return {
                 'path': str(latest_file),
                 'name': latest_file.name,
                 'size': latest_file.stat().st_size,
-                'modified': latest_file.stat().st_mtime
+                'modified': latest_file.stat().st_mtime,
             }
-            
+
         except Exception as e:
             print(f"[OBS] ⚠️ Error finding recordings: {e}")
             return {}
