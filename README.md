@@ -16,6 +16,8 @@ Tested on Linux and Mac, should work on Windows as well, but if you are on Windo
 
 ## How to run
 
+First, make sure you have OBS installed and configured. You also need to enable Websocket Server in OBS. This is found under Tools -> Websocket Server Settings -> Enable Websocket server
+
 Linx/Mac
 
 1. Make the script executable via terminal: chmod +x launch.sh (Make sure you are in the folder where the app is located)
