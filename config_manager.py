@@ -50,12 +50,13 @@ class ConfigManager:
             'track_player_deaths': 'false',
         },
         'Difficulties': {
-            'record_lfr': 'false',
+        # Raids
+            'record_lfr':    'false',
             'record_normal': 'true',
             'record_heroic': 'true',
             'record_mythic': 'true',
-            'record_other': 'false',
-            'record_mplus': 'true',
+        # Dungeons
+            'record_mplus':  'true',
         },
         'CloudUpload': {
             'enabled': 'false',
@@ -200,16 +201,14 @@ generate_metadata_json = false
 track_player_deaths = false
 
 [Difficulties]
-# Which raid difficulties to record
-# Set to true to record, false to ignore
-
+# --- Raids ---
 record_lfr = false
 record_normal = true
 record_heroic = true
 record_mythic = true
-record_other = false
-record_mplus = true
 
+# --- Dungeons ---
+record_mplus = true
 [CloudUpload]
 # Enable cloud upload functionality
 enabled = false
@@ -585,7 +584,7 @@ proton_folder =
         print(f"  • Normal: {'✓' if self.RECORD_NORMAL else '✗'}")
         print(f"  • Heroic: {'✓' if self.RECORD_HEROIC else '✗'}")
         print(f"  • Mythic: {'✓' if self.RECORD_MYTHIC else '✗'}")
-        print(f"  • Other: {'✓' if self.RECORD_OTHER else '✗'}")
+        print(f"  • M+:     {'✓' if self.RECORD_MPLUS else '✗'}")
         print(f"  • Total IDs: {len(enabled)}")
         
         # Cloud upload summary

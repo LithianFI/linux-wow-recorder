@@ -9,34 +9,34 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 
+class RecordingCategory:
+    """Valid category strings matching WCR VideoCategory enum."""
+    RAIDS   = "Raids"
+    MYTHIC_PLUS = "MythicPlus"
+    MANUAL  = "Manual"
+
 
 class RecordingMetadata:
-    """Generates metadata JSON files compatible with Warcraft Recorder format."""
-    
-    def __init__(self):
-        """Initialize metadata generator."""
-        self.reset()
-    
     def reset(self):
         """Reset metadata for a new recording."""
-        self.category = "Raids"
+        self.category = RecordingCategory.MANUAL   # safe default; overridden per event
         self.zone_id = 0
-        self.zone_name = "Unknown Raid"
+        self.zone_name = "Unknown"
         self.flavour = "Retail"
         self.encounter_id = None
         self.encounter_name = None
         self.difficulty_id = None
         self.difficulty = None
         self.duration = 0
-        self.result = False  # True = kill, False = wipe
+        self.result = False
         self.player_info = {}
         self.deaths = []
-        self.overrun = 0  # Time after boss died
+        self.overrun = 0
         self.combatants = []
         self.start_timestamp = None
         self.unique_hash = None
         self.boss_percent = 0
-        self.app_version = "1.0.0"  # WoW Raid Recorder version
+        self.app_version = "1.0.0"
     
     def set_encounter_info(self, encounter_id: int, encounter_name: str, 
                           difficulty_id: int, zone_id: int = 0, zone_name: str = "Unknown Raid"):

@@ -16,7 +16,7 @@ from combat_parser.events import CombatEvent, BossInfo, DungeonInfo
 from combat_parser.file_manager import RecordingFileManager
 from combat_parser.recording_processor import RecordingProcessor
 from combat_parser.dungeon_monitor import DungeonMonitor
-from metadata_generator import RecordingMetadata, DeathParser
+from metadata_generator import RecordingMetadata, RecordingCategory, DeathParser
 
 from constants import LOG_PREFIXES
 
@@ -57,6 +57,11 @@ class CombatParser:
 
     def process_line(self, line: str):
         """Process a single combat log line."""
+        # Always try to identify the player first, before any other processing.
+        # This runs on every line but short-circuits immediately once resolved.
+        if not (self.player_guid and self.player_name):
+            self._try_identify_player(line)
+
         # Parse the line
         event = CombatEvent(line)
         if not event.is_valid():
@@ -85,84 +90,128 @@ class CombatParser:
                 self.encounter_deaths.append(death_info['timestamp'])
                 print(f"{LOG_PREFIXES['PARSER']} 💀 Player death: {death_info['name']}")
 
-        # Capture player GUID from COMBATANT_INFO (fires at encounter start)
-        if 'COMBATANT_INFO' in line and self.player_guid is None:
-            self._parse_player_info(line)
+        # Grab specID from COMBATANT_INFO once we know the player GUID
+        if self.player_guid and self.player_spec_id is None and 'COMBATANT_INFO' in line:
+            self._parse_combatant_info(line)
 
-        # Resolve player name/realm from any event where they are the source
-        if self.player_guid and not (self.player_name and self.player_realm):
-            self._try_resolve_player_name(event)
 
-    def _parse_player_info(self, line: str):
-        """Extract player information from COMBATANT_INFO line.
-        
-        Format: TIMESTAMP  COMBATANT_INFO,playerGUID,faction,strength,agility,...
-        Player name and realm are NOT present in COMBATANT_INFO — they are resolved
-        later from combat events via _try_resolve_player_name().
+    def _try_identify_player(self, line: str):
+        """Attempt to identify the player GUID and name from any combat log line.
+
+        Regular combat events carry source and dest unit info in a predictable
+        position. We look for any Player- GUID paired with a quoted name and
+        use the unit flags to confirm it is the local player (0x511 = 
+        AFFILIATION_MINE | REACTION_FRIENDLY | CONTROL_PLAYER | TYPE_PLAYER).
+
+        Format (after the double-space timestamp):
+          EVENT,srcGUID,"srcName",srcFlags,srcRaidFlags,
+                dstGUID,"dstName",dstFlags,dstRaidFlags,...
+
+        We operate on the raw line here rather than going through CombatEvent
+        so that this stays as cheap as possible — it runs on every single line.
         """
-        try:
-            event = CombatEvent(line)
-            if not event.is_valid() or len(event.fields) < 2:
-                return
-
-            guid = event.fields[1]
-            if not guid.startswith("Player-"):
-                return
-
-            self.player_guid = guid
-            print(f"{LOG_PREFIXES['PARSER']} Player GUID captured: {guid}")
-
-        except Exception as e:
-            print(f"{LOG_PREFIXES['PARSER']} Error parsing player info: {e}")
-
-    def _try_resolve_player_name(self, event: CombatEvent):
-        """Attempt to resolve the player's name and realm from a combat event.
-
-        Once the GUID is known, any line where sourceGUID matches gives us the
-        sourceName in the format "Name-Realm", which is all we need.
-        """
-        if not self.player_guid or (self.player_name and self.player_realm):
-            return  # Nothing to do
+        # Quick pre-check: must contain a Player- GUID
+        if 'Player-' not in line:
+            return
 
         try:
-            # Standard combat event layout:
-            # fields[0] = eventType
-            # fields[1] = sourceGUID
-            # fields[2] = sourceName  (format: "CharacterName-RealmName")
-            # fields[3] = sourceFlags
-            # fields[4] = sourceRaidFlags
-            # fields[5] = destGUID
-            # ...
-            if len(event.fields) < 3:
+            # Split off the timestamp
+            ts_split = line.split('  ', 1)
+            if len(ts_split) < 2:
+                return
+            data = ts_split[1].strip()
+
+            # Split into the first 9 fields (event + 4 src fields + 4 dst fields)
+            # Use a limit so we don't split the whole (potentially huge) line
+            parts = data.split(',', 9)
+            if len(parts) < 9:
                 return
 
-            if event.fields[1] != self.player_guid:
+            # parts[0] = eventType
+            # parts[1] = srcGUID   parts[2] = srcName   parts[3] = srcFlags
+            # parts[5] = dstGUID   parts[6] = dstName   parts[7] = dstFlags
+            LOCAL_PLAYER_FLAGS = {'0x511', '0x10511'}  # seen in retail logs
+
+            for guid_idx, name_idx, flags_idx in ((1, 2, 3), (5, 6, 7)):
+                guid = parts[guid_idx].strip()
+                flags = parts[flags_idx].strip()
+
+                if not guid.startswith('Player-'):
+                    continue
+                if flags not in LOCAL_PLAYER_FLAGS:
+                    continue
+
+                raw_name = parts[name_idx].strip().strip('"')
+                if not raw_name or raw_name in ('nil', 'Unknown'):
+                    continue
+
+                # Name format: "CharName-RealmName-Region"
+                # e.g. "Isalith-Ravencrest-EU"
+                # We want CharName and RealmName, dropping the trailing region code.
+                # Region codes are always 2-3 uppercase letters (EU, US, TW, KR, CN).
+                name_parts = raw_name.split('-')
+
+                if len(name_parts) >= 3:
+                    # Check if the last part looks like a region code
+                    region_code = name_parts[-1]
+                    if region_code.isupper() and len(region_code) <= 3:
+                        name = name_parts[0]
+                        realm = '-'.join(name_parts[1:-1])  # realm may itself contain hyphens
+                    else:
+                        name = name_parts[0]
+                        realm = '-'.join(name_parts[1:])
+                elif len(name_parts) == 2:
+                    name = name_parts[0]
+                    realm = name_parts[1]
+                else:
+                    name = raw_name
+                    realm = 'Unknown'
+
+                if not name:
+                    continue
+
+                self.player_guid = guid
+                self.player_name = name
+                self.player_realm = realm
+                print(f"{LOG_PREFIXES['PARSER']} Player identified: "
+                      f"{name}-{realm} (GUID: {guid})")
                 return
-
-            raw_name = event.fields[2]  # e.g. "Lithian-Silvermoon"
-            if not raw_name or raw_name in ("nil", "Unknown"):
-                return
-
-            if "-" in raw_name:
-                name, realm = raw_name.rsplit("-", 1)
-            else:
-                name, realm = raw_name, "Unknown"
-
-            self.player_name = name
-            self.player_realm = realm
-            print(f"{LOG_PREFIXES['PARSER']} Player identified: {name}-{realm}")
-
-            # Back-fill player info into current metadata if an encounter is already active
-            if self.current_metadata.encounter_name:
-                self.current_metadata.set_player_info(
-                    guid=self.player_guid,
-                    name=self.player_name,
-                    realm=self.player_realm,
-                    spec_id=self.player_spec_id or 0,
-                )
 
         except Exception as e:
-            print(f"{LOG_PREFIXES['PARSER']} Error resolving player name: {e}")
+            print(f"{LOG_PREFIXES['PARSER']} Error in player identification: {e}")
+            
+    
+    def _parse_combatant_info(self, line: str):
+        """Extract specID from the player's COMBATANT_INFO line.
+
+        COMBATANT_INFO fields (comma-separated, after the event type):
+          [0] COMBATANT_INFO
+          [1] playerGUID
+          [2] faction
+          [3-24] stats (strength, agility, stamina, ...)
+          [24] specID   ← index 24 from the start of the data segment
+        """
+        try:
+            ts_split = line.split('  ', 1)
+            if len(ts_split) < 2:
+                return
+
+            # Split only up to field 26 to avoid parsing the huge talent/gear arrays
+            parts = ts_split[1].split(',', 26)
+            if len(parts) < 25:
+                return
+
+            guid = parts[1].strip()
+            if guid != self.player_guid:
+                return  # Not the local player's COMBATANT_INFO
+
+            spec_id = int(parts[24].strip())
+            if spec_id > 0:
+                self.player_spec_id = spec_id
+                print(f"{LOG_PREFIXES['PARSER']} Player specID: {spec_id}")
+
+        except (ValueError, IndexError):
+            pass
 
     def _handle_dungeon_start(self, event: CombatEvent):
         """Handle CHALLENGE_MODE_START event."""
@@ -359,64 +408,59 @@ class CombatParser:
         print(f"{LOG_PREFIXES['PARSER']} Ended encounter: {boss_info.name}")
 
     def _init_metadata_for_encounter(self, boss_info: BossInfo):
-        """Initialize metadata for a new encounter."""
+        """Initialize metadata for a new raid/boss encounter."""
         if not (self.config.GENERATE_METADATA_JSON or self.config.FILE_NAMING_SCHEME == 'wcr'):
             return
 
-        # Reset metadata
         self.current_metadata.reset()
         self.encounter_deaths = []
-        
-        # Set encounter info
+
+        # Explicit category for boss encounters
+        self.current_metadata.category = RecordingCategory.RAIDS
+
         self.current_metadata.set_encounter_info(
             encounter_id=boss_info.boss_id,
             encounter_name=boss_info.name,
-            difficulty_id=boss_info.difficulty_id
+            difficulty_id=boss_info.difficulty_id,
         )
-        
-        # Set player info if available
+
         if self.player_guid and self.player_name:
             self.current_metadata.set_player_info(
                 guid=self.player_guid,
                 name=self.player_name,
                 realm=self.player_realm or "Unknown",
-                spec_id=self.player_spec_id or 0
+                spec_id=self.player_spec_id or 0,
             )
-        
-        # Set start time
+
         start_ms = self._parse_timestamp_to_ms(boss_info.timestamp)
         self.current_metadata.set_start_time(start_ms)
         self.encounter_start_time = datetime.now()
 
     def _init_metadata_for_dungeon(self, dungeon_info: DungeonInfo):
-        """Initialize metadata for a new dungeon."""
+        """Initialize metadata for a Mythic+ dungeon run."""
         if not (self.config.GENERATE_METADATA_JSON or self.config.FILE_NAMING_SCHEME == 'wcr'):
             return
 
-        # Reset metadata
         self.current_metadata.reset()
         self.encounter_deaths = []
-        
-        # Set dungeon as category
-        self.current_metadata.category = "Mythic+"
-        
-        # Set dungeon info (use dungeon as encounter)
+
+        # Explicit category for M+ dungeons
+        self.current_metadata.category = RecordingCategory.MYTHIC_PLUS
+
         self.current_metadata.set_encounter_info(
             encounter_id=dungeon_info.dungeon_id,
             encounter_name=f"{dungeon_info.name} +{dungeon_info.dungeon_level}",
             difficulty_id=8,  # Mythic+ difficulty ID
         )
-        
-        # Set player info if available
+
         if self.player_guid and self.player_name:
             self.current_metadata.set_player_info(
                 guid=self.player_guid,
                 name=self.player_name,
                 realm=self.player_realm or "Unknown",
-                spec_id=self.player_spec_id or 0
+                spec_id=self.player_spec_id or 0,
             )
-        
-        # Set start time
+
         start_ms = self._parse_timestamp_to_ms(dungeon_info.timestamp)
         self.current_metadata.set_start_time(start_ms)
         self.encounter_start_time = datetime.now()
