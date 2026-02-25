@@ -694,7 +694,7 @@ def handle_combat_event(event: dict):
 
 
 def handle_recording_saved(recording_info: dict = None):
-    """Handle recording saved event - notify clients to refresh recordings list."""
+    """Handle recording saved event — notify clients and trigger cloud upload."""
     socketio.emit('recordings_updated')
 
     if not (cloud_manager and cloud_manager.is_ready() and combat_parser):
@@ -718,25 +718,47 @@ def handle_recording_saved(recording_info: dict = None):
             return
 
         file_path = record_dir / recordings[0]['name']
-        stem = file_path.stem  # filename without extension
 
-        # Build VideoMetadata with fields matching the rewritten dataclass
-        import hashlib, time as _time
-        unique_hash = hashlib.md5(f"{stem}_{_time.time()}".encode()).hexdigest()
+        # ── Use the rich metadata the parser already built ──────────────────
+        # combat_parser.current_metadata is a RecordingMetadata (metadata_generator.py)
+        # and already has player, combatants, deaths, zone, difficulty, etc.
+        parsed_meta = combat_parser.current_metadata
 
         from cloud_upload import VideoMetadata
+
+        # video_name = stem (no extension), video_key = full filename
+        stem = file_path.stem
+        video_key = file_path.name
+
+        # Build the cloud payload, pulling every field from the parsed metadata
         metadata = VideoMetadata(
             video_name=stem,
-            video_key=file_path.name,
+            video_key=video_key,
             file_path=str(file_path),
             file_size=file_path.stat().st_size,
-            start=int(_time.time() * 1000),
-            unique_hash=unique_hash,
-            category='dungeon' if info.get('category') == 'dungeon' else 'Raids',
-            encounter_name=info.get('boss_name'),
-            difficulty_id=info.get('difficulty_id'),
-            duration=int(duration),
-            result=bool(info.get('is_kill', False)),
+            start=parsed_meta.start_timestamp or int(time.time() * 1000),
+            unique_hash=parsed_meta.unique_hash or '',
+            category=parsed_meta.category,          # 'Raids' or 'Mythic+' — correct string
+            flavour=parsed_meta.flavour,
+            encounter_name=parsed_meta.encounter_name,
+            encounter_id=parsed_meta.encounter_id,
+            difficulty_id=parsed_meta.difficulty_id,
+            difficulty=parsed_meta.difficulty,
+            duration=parsed_meta.duration or int(duration),
+            result=parsed_meta.result,
+            boss_percent=parsed_meta.boss_percent,
+            zone_id=parsed_meta.zone_id,
+            zone_name=parsed_meta.zone_name,
+            player=parsed_meta.player_info or None,
+            combatants=parsed_meta.combatants or [],
+            deaths=parsed_meta.deaths or [],
+            overrun=parsed_meta.overrun,
+            app_version=parsed_meta.app_version,
+            # M+ specific (will be 0 / None if this is a raid — harmless)
+            keystone_level=getattr(parsed_meta, 'keystone_level', None),
+            map_id=getattr(parsed_meta, 'map_id', None),
+            upgrade_level=getattr(parsed_meta, 'upgrade_level', 0),
+            affixes=getattr(parsed_meta, 'affixes', None),
         )
 
         cloud_manager.queue_upload(file_path=file_path, metadata=metadata)

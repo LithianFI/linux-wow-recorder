@@ -47,14 +47,14 @@ class UploadProgress:
 
 @dataclass
 class VideoMetadata:
-    """Metadata for uploaded videos — matches WCR CloudMetadata shape."""
-    video_name: str       # basename without extension  e.g. "2026-02-24 00-36-26 - Foo - Bar [M] (Kill)"
-    video_key: str        # basename with extension     e.g. "2026-02-24 00-36-26 - Foo - Bar [M] (Kill).mp4"
+    """Metadata for uploaded videos — matches WCR CloudMetadata / Metadata shape exactly."""
+    video_name: str       # stem without extension
+    video_key: str        # filename with extension, exactly as stored in R2
     file_path: str
     file_size: int
     start: int            # epoch ms
     unique_hash: str
-    category: str = 'Raids'
+    category: str = 'Raids'          # must be a VideoCategory string: 'Raids', 'Mythic+', etc.
     flavour: str = 'Retail'
     encounter_name: Optional[str] = None
     encounter_id: Optional[int] = None
@@ -70,9 +70,14 @@ class VideoMetadata:
     deaths: Optional[List] = None
     overrun: int = 0
     app_version: str = '1.0.0'
+    # M+ specific fields (maps to ChallengeModeDungeon.getMetadata())
+    keystone_level: Optional[int] = None
+    map_id: Optional[int] = None
+    upgrade_level: int = 0
+    affixes: Optional[List[int]] = None
 
     def to_cloud_metadata(self) -> dict:
-        """Build the payload for POST /guild/{g}/video matching WCR CloudMetadata."""
+        """Build the payload for POST /guild/{g}/video matching WCR CloudMetadata type."""
         d = {
             'videoName': self.video_name,
             'videoKey': self.video_key,
@@ -89,6 +94,7 @@ class VideoMetadata:
             'combatants': self.combatants or [],
             'appVersion': self.app_version,
         }
+
         if self.encounter_name:
             d['encounterName'] = self.encounter_name
         if self.encounter_id:
@@ -101,8 +107,18 @@ class VideoMetadata:
             d['player'] = self.player
         if self.deaths:
             d['deaths'] = self.deaths
-        return d
 
+        # M+ specific fields — only include when present
+        if self.keystone_level is not None:
+            d['keystoneLevel'] = self.keystone_level
+        if self.map_id is not None:
+            d['mapID'] = self.map_id
+        if self.upgrade_level:
+            d['upgradeLevel'] = self.upgrade_level
+        if self.affixes:
+            d['affixes'] = self.affixes
+
+        return d
 
 # =============================================================================
 # Abstract Base

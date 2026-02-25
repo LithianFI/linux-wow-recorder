@@ -19,7 +19,7 @@ class RecordingCategory:
 class RecordingMetadata:
     def reset(self):
         """Reset metadata for a new recording."""
-        self.category = RecordingCategory.MANUAL   # safe default; overridden per event
+        self.category = RecordingCategory.MANUAL
         self.zone_id = 0
         self.zone_name = "Unknown"
         self.flavour = "Retail"
@@ -37,6 +37,11 @@ class RecordingMetadata:
         self.unique_hash = None
         self.boss_percent = 0
         self.app_version = "1.0.0"
+        # M+ specific fields
+        self.keystone_level: Optional[int] = None
+        self.map_id: Optional[int] = None
+        self.upgrade_level: int = 0
+        self.affixes: Optional[List[int]] = None
     
     def set_encounter_info(self, encounter_id: int, encounter_name: str, 
                           difficulty_id: int, zone_id: int = 0, zone_name: str = "Unknown Raid"):
@@ -72,30 +77,66 @@ class RecordingMetadata:
         if combatant not in self.combatants:
             self.combatants.append(combatant)
     
-    def add_death(self, name: str, timestamp_ms: int):
+    def add_death(self, name: str, timestamp_ms: int, spec_id: int = 0, friendly: bool = True):
         """Add a player death event.
 
-        Stored as {"timestamp": ms, "name": "CharName"} so the frontend
-        can display named tooltips on the timeline death markers.
+        Shape matches WCR's PlayerDeathType:
+          { name, specId, date (ISO), timestamp (ms), friendly }
         """
+        # Convert ms timestamp to an ISO date string WCR expects
+        from datetime import datetime, timezone
+        date_iso = datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc).isoformat()
+
         self.deaths.append({
-            "timestamp": timestamp_ms,
             "name": name,
+            "specId": spec_id,      # camelCase to match WCR PlayerDeathType
+            "date": date_iso,
+            "timestamp": timestamp_ms,
+            "friendly": friendly,
         })
     
     def set_result(self, is_kill: bool, duration: float, boss_percent: float = 0):
-        """Set encounter result."""
+        """Set encounter result and recompute uniqueHash (result is part of the hash)."""
         self.result = is_kill
         self.duration = int(duration)
-        self.boss_percent = int(boss_percent) if is_kill else int(boss_percent)
+        self.boss_percent = int(boss_percent)
+        # Result changed — hash must be recomputed
+        if self.start_timestamp is not None:
+            self._recompute_hash()
     
     def set_start_time(self, timestamp_ms: int):
-        """Set encounter start timestamp."""
+        """Set encounter start timestamp and compute uniqueHash using WCR's algorithm.
+
+        WCR Activity.getUniqueHash():
+          md5( category + ' ' + flavour + ' ' + str(result)
+               + sorted_combatant_names_joined )
+
+        This must match exactly so the backend can group multi-PoV videos.
+        """
         self.start_timestamp = timestamp_ms
-        
-        # Generate unique hash based on timestamp and encounter
-        hash_input = f"{timestamp_ms}_{self.encounter_id}_{self.encounter_name}"
-        self.unique_hash = hashlib.md5(hash_input.encode()).hexdigest()
+        self._recompute_hash()
+    
+    def _recompute_hash(self):
+        """Recompute the uniqueHash from current state. Call after any change to
+        category, flavour, result, or combatants that affects the hash."""
+        import hashlib
+
+        # Mirror WCR: [category, flavour, str(result)].join(' ')
+        # Python's str(True) == 'True' but JS's true.toString() == 'true'
+        result_str = 'true' if self.result else 'false'
+        deterministic = f"{self.category} {self.flavour} {result_str}"
+
+        # Sorted combatant names (WCR uses _name field)
+        names = sorted(
+            c['_name'] for c in self.combatants if c.get('_name')
+        )
+        # Also include player name if available and not already in combatants
+        if self.player_info.get('_name') and self.player_info['_name'] not in names:
+            names.append(self.player_info['_name'])
+            names.sort()
+
+        unique_string = deterministic + ''.join(names)
+        self.unique_hash = hashlib.md5(unique_string.encode('utf-8')).hexdigest()
     
     def generate_filename(self, start_datetime: datetime, extension: str = ".mp4") -> str:
         """
