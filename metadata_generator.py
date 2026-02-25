@@ -280,12 +280,14 @@ class DeathParser:
             # Split event data by comma
             fields = event_data.split(",")
             
-            if len(fields) < 8:
+            if len(fields) < 9:
                 return None
             
-            # Extract player GUID (field 4) and name (field 5)
-            player_guid = fields[4].strip()
-            player_name = fields[5].strip().strip('"')
+            # Extract player GUID (field 5) and name (field 6)
+            # Base parameters: [0]=eventType, [1]=srcGUID, [2]=srcName, [3]=srcFlags,
+            # [4]=srcRaidFlags, [5]=destGUID, [6]=destName, [7]=destFlags, [8]=destRaidFlags
+            player_guid = fields[5].strip()
+            player_name = fields[6].strip().strip('"')
             
             # Only track player deaths
             if not player_guid.startswith("Player-"):
