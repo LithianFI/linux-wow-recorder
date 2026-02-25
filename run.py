@@ -5,7 +5,6 @@ Runs the recorder and web interface in a single process with WebSocket communica
 """
 
 import sys
-import json
 import time
 import signal
 import argparse
@@ -820,6 +819,9 @@ def init_recorder(config_path: Path) -> bool:
         combat_parser.on_recording_saved = handle_recording_saved  # This should point to handle_recording_saved
 
         log_monitor = LogMonitor(config_manager.LOG_DIR, combat_parser)
+
+        # Give the parser a way to find the current log file for post-encounter death scanning
+        combat_parser.get_log_path = lambda: log_monitor.handler.current_log if log_monitor.handler else None
 
         if config_manager.LOG_DIR.exists():
             log_monitor.start()

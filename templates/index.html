@@ -693,15 +693,15 @@
                     if (!meta || !meta.deaths || meta.deaths.length === 0) return;
                     if (!meta.start || !meta.duration) return;
 
-                    const durationMs = meta.duration * 1000;
+                    const durationSecs = meta.duration;
 
                     meta.deaths.forEach((death) => {
-                        const deathMs = typeof death === 'object' ? death.timestamp : death;
-                        const offsetMs = deathMs - meta.start;
-                        if (offsetMs < 0 || offsetMs > durationMs) return;
+                        // death.timestamp is seconds from encounter start (WCR format)
+                        const offsetSecs = typeof death === 'object' ? death.timestamp : death;
+                        if (offsetSecs < 0 || offsetSecs > durationSecs) return;
 
-                        this.previewDeathMarkerPositions.push((offsetMs / durationMs) * 100);
-                        this.previewDeathTimesSeconds.push(offsetMs / 1000);
+                        this.previewDeathMarkerPositions.push((offsetSecs / durationSecs) * 100);
+                        this.previewDeathTimesSeconds.push(offsetSecs);
                         this.previewDeathNames.push(typeof death === 'object' ? (death.name || '') : '');
                     });
                 },

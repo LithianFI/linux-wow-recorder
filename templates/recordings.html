@@ -423,21 +423,18 @@
                         if (!meta || !meta.deaths || meta.deaths.length === 0) return;
                         if (!meta.start || !meta.duration) return;
 
-                        const durationMs = meta.duration * 1000;
+                        const durationSecs = meta.duration;
 
                         meta.deaths.forEach((death, i) => {
-                            const deathMs = typeof death === 'object' ? death.timestamp : death;
-                            const offsetMs = deathMs - meta.start;
-                            if (offsetMs < 0 || offsetMs > durationMs) return;
+                            // death.timestamp is seconds from encounter start (WCR format)
+                            const offsetSecs = typeof death === 'object' ? death.timestamp : death;
+                            if (offsetSecs < 0 || offsetSecs > durationSecs) return;
 
-                            const pct = (offsetMs / durationMs) * 100;
-                            const secs = offsetMs / 1000;
+                            const pct = (offsetSecs / durationSecs) * 100;
 
                             this.deathMarkerPositions.push(pct);
-                            this.deathTimesSeconds.push(secs);
+                            this.deathTimesSeconds.push(offsetSecs);
 
-                            // Try to get player name from deaths array (if stored as objects)
-                            // Falls back to empty string if just a timestamp number
                             const name = typeof death === 'object' ? (death.name || '') : '';
                             this.deathNames.push(name);
                         });

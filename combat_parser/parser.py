@@ -43,14 +43,21 @@ class CombatParser:
         self.on_event: Optional[Callable] = None
         self.on_recording_saved: Optional[Callable] = None
 
+        # Callback to retrieve the current log file path from LogMonitor
+        # Set by run.py after both parser and log_monitor are created
+        self.get_log_path: Optional[Callable] = None
+
         # Metadata tracking
         self.current_metadata = RecordingMetadata()
-        self.encounter_deaths = []
         self.player_guid = None
         self.player_name = None
         self.player_realm = None
         self.player_spec_id = None
         self.encounter_start_time = None
+
+        # Log timestamps for the current encounter window (used for death scanning)
+        self.encounter_start_log_timestamp: Optional[str] = None
+        self.encounter_end_log_timestamp: Optional[str] = None
 
         # Start dungeon monitor
         self.dungeon_monitor.start()
@@ -82,16 +89,6 @@ class CombatParser:
             self._handle_encounter_start(event)
         elif event.is_encounter_end:
             self._handle_encounter_end(event)
-
-        # Track deaths if enabled and in active encounter
-        if self.config.TRACK_PLAYER_DEATHS and (self.state.encounter_active or self.state.dungeon_active):
-            death_info = DeathParser.parse_death_line(line)
-            if death_info:
-                self.encounter_deaths.append({
-                    'timestamp': death_info['timestamp'],
-                    'name': death_info['name'],
-                })
-                print(f"{LOG_PREFIXES['PARSER']} 💀 Player death: {death_info['name']}")
 
         # Grab specID from COMBATANT_INFO once we know the player GUID
         if self.player_guid and self.player_spec_id is None and 'COMBATANT_INFO' in line:
@@ -244,6 +241,10 @@ class CombatParser:
             dungeon_info.timestamp
         )
 
+        # Store log timestamp for post-encounter death scanning
+        self.encounter_start_log_timestamp = dungeon_info.timestamp
+        self.encounter_end_log_timestamp = None
+
         # Initialize metadata for M+ dungeon
         self._init_metadata_for_dungeon(dungeon_info)
 
@@ -283,6 +284,11 @@ class CombatParser:
             dungeon_level=dungeon_level or 0,
             timestamp=timestamp
         )
+
+        # Scan log file for deaths in the dungeon window
+        self.encounter_end_log_timestamp = event.timestamp
+        if self.config.TRACK_PLAYER_DEATHS:
+            self._scan_log_for_encounter_data()
 
         self._finalize_metadata(is_kill=is_success, duration=dungeon_duration)
 
@@ -355,6 +361,10 @@ class CombatParser:
             boss_info.difficulty_id, boss_info.instance_id
         )
 
+        # Store log timestamp for post-encounter death scanning
+        self.encounter_start_log_timestamp = boss_info.timestamp
+        self.encounter_end_log_timestamp = None
+
         # Initialize metadata for encounter
         self._init_metadata_for_encounter(boss_info)
 
@@ -392,6 +402,11 @@ class CombatParser:
             timestamp=event.timestamp
         )
 
+        # Scan log file for deaths in the encounter window
+        self.encounter_end_log_timestamp = event.timestamp
+        if self.config.TRACK_PLAYER_DEATHS:
+            self._scan_log_for_encounter_data()
+
         # Update metadata with result
         self._finalize_metadata(is_kill=is_kill, duration=encounter_duration)
 
@@ -420,7 +435,6 @@ class CombatParser:
             return
 
         self.current_metadata.reset()
-        self.encounter_deaths = []
 
         # Explicit category for boss encounters
         self.current_metadata.category = RecordingCategory.RAIDS
@@ -449,7 +463,6 @@ class CombatParser:
             return
 
         self.current_metadata.reset()
-        self.encounter_deaths = []
 
         # Explicit category for M+ dungeons
         self.current_metadata.category = RecordingCategory.MYTHIC_PLUS
@@ -483,11 +496,181 @@ class CombatParser:
             boss_percent=100 if is_kill else 0,
         )
 
-        for death in self.encounter_deaths:
-            self.current_metadata.add_death(
-                name=death['name'],
-                timestamp_ms=death['timestamp'],
-            )
+        # Deaths already added to current_metadata by _scan_log_for_deaths()
+        # which is called before _finalize_metadata on encounter/dungeon end.
+
+    def _scan_log_for_encounter_data(self):
+        """Scan the current log file between encounter start and end timestamps
+        to collect UNIT_DIED events (deaths) and COMBATANT_INFO lines (raid members).
+
+        WoW only flushes combat log data to disk after the encounter ends, so
+        neither deaths nor combatant info can be collected in real-time -- we must
+        read them retroactively once ENCOUNTER_END / CHALLENGE_MODE_END fires.
+
+        COMBATANT_INFO fields (indices after splitting on comma):
+          [0] COMBATANT_INFO
+          [1] playerGUID
+          [2] faction  (0 or 1, maps to _teamID)
+          [3..22] stats
+          [23] currentSpecID
+          (followed by talent/gear arrays)
+
+        Player names are not in COMBATANT_INFO directly -- we build a GUID->name
+        map from srcGUID/srcName pairs seen throughout the encounter window.
+        """
+        if not self.get_log_path:
+            print(f"{LOG_PREFIXES['PARSER']} No log path callback set, cannot scan encounter data")
+            return
+
+        log_path = self.get_log_path()
+        if not log_path or not log_path.exists():
+            print(f"{LOG_PREFIXES['PARSER']} Log file not available for encounter data scan")
+            return
+
+        start_ts = self.encounter_start_log_timestamp
+        end_ts = self.encounter_end_log_timestamp
+
+        if not start_ts or not end_ts:
+            print(f"{LOG_PREFIXES['PARSER']} Missing encounter timestamps for data scan")
+            return
+
+        print(f"{LOG_PREFIXES['PARSER']} Scanning log between {start_ts[:19]} and {end_ts[:19]}")
+
+        deaths_found = 0
+        combatants_found = 0
+        in_window = False
+
+        # GUID -> (name, realm) map built from any combat event in the window
+        guid_to_name: dict = {}
+
+        # First pass: collect all lines in the window into memory so we can
+        # build the GUID->name map before processing COMBATANT_INFO lines.
+        window_lines = []
+        try:
+            with open(log_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    if start_ts in line:
+                        in_window = True
+                    if not in_window:
+                        continue
+                    window_lines.append(line)
+                    if end_ts in line:
+                        break
+        except Exception as e:
+            print(f"{LOG_PREFIXES['PARSER']} Error reading log for encounter data: {e}")
+            return
+
+        # Build GUID->name map from src/dest fields in every line.
+        # Standard combat event format (after timestamp double-space):
+        #   eventType, srcGUID, srcName, srcFlags, srcRaidFlags,
+        #   destGUID, destName, destFlags, destRaidFlags, ...
+        for line in window_lines:
+            try:
+                ts_split = line.split('  ', 1)
+                if len(ts_split) < 2:
+                    continue
+                parts = ts_split[1].split(',', 9)
+                if len(parts) < 7:
+                    continue
+                for guid_idx, name_idx in ((1, 2), (5, 6)):
+                    guid = parts[guid_idx].strip()
+                    if not guid.startswith('Player-'):
+                        continue
+                    raw_name = parts[name_idx].strip().strip('"')
+                    if not raw_name or raw_name in ('nil', 'Unknown'):
+                        continue
+                    if guid not in guid_to_name:
+                        # Split "CharName-Realm-Region" -> (CharName, Realm)
+                        name_parts = raw_name.split('-')
+                        if len(name_parts) >= 3 and name_parts[-1].isupper() and len(name_parts[-1]) <= 3:
+                            name = name_parts[0]
+                            realm = '-'.join(name_parts[1:-1])
+                        elif len(name_parts) == 2:
+                            name = name_parts[0]
+                            realm = name_parts[1]
+                        else:
+                            name = raw_name
+                            realm = 'Unknown'
+                        guid_to_name[guid] = (name, realm)
+            except Exception:
+                continue
+
+        # Build GUID->specID map from COMBATANT_INFO lines (needed for death specId)
+        guid_to_spec: dict = {}
+        for line in window_lines:
+            if 'COMBATANT_INFO' not in line:
+                continue
+            try:
+                ts_split = line.split('  ', 1)
+                if len(ts_split) < 2:
+                    continue
+                parts = ts_split[1].split(',', 25)
+                if len(parts) < 24:
+                    continue
+                guid = parts[1].strip()
+                spec_id = int(parts[23].strip())
+                if guid.startswith('Player-') and spec_id > 0:
+                    guid_to_spec[guid] = spec_id
+            except (ValueError, IndexError):
+                continue
+
+        # Second pass: process deaths and COMBATANT_INFO lines
+        for line in window_lines:
+            if 'UNIT_DIED' in line and self.config.TRACK_PLAYER_DEATHS:
+                death_info = DeathParser.parse_death_line(line)
+                if death_info:
+                    spec_id = guid_to_spec.get(death_info['guid'], 0)
+                    self.current_metadata.add_death(
+                        name=death_info['name'],
+                        timestamp_ms=death_info['timestamp'],
+                        spec_id=spec_id,
+                    )
+                    deaths_found += 1
+                    print(f"{LOG_PREFIXES['PARSER']} 💀 Death: {death_info['name']}")
+
+            if 'COMBATANT_INFO' in line:
+                try:
+                    ts_split = line.split('  ', 1)
+                    if len(ts_split) < 2:
+                        continue
+                    # Split only as far as we need (up to specID at index 23)
+                    parts = ts_split[1].split(',', 25)
+                    if len(parts) < 24:
+                        continue
+
+                    guid = parts[1].strip()
+                    if not guid.startswith('Player-'):
+                        continue
+
+                    faction = int(parts[2].strip())
+                    spec_id = int(parts[23].strip())
+
+                    # Skip if we can't identify this player
+                    if guid not in guid_to_name:
+                        continue
+
+                    name, realm = guid_to_name[guid]
+
+                    # Update local player's specID if we haven't got it yet
+                    if guid == self.player_guid and self.player_spec_id is None and spec_id > 0:
+                        self.player_spec_id = spec_id
+                        if self.current_metadata.player_info:
+                            self.current_metadata.player_info["_specID"] = spec_id
+
+                    # Add as combatant (add_combatant deduplicates internally)
+                    self.current_metadata.add_combatant(
+                        guid=guid,
+                        name=name,
+                        realm=realm,
+                        spec_id=spec_id,
+                        team_id=faction,
+                    )
+                    combatants_found += 1
+
+                except (ValueError, IndexError):
+                    continue
+
+        print(f"{LOG_PREFIXES['PARSER']} Scan complete: {deaths_found} deaths, {combatants_found} combatants found")
 
     def _parse_timestamp_to_ms(self, timestamp: str) -> int:
         """Parse combat log timestamp to milliseconds."""

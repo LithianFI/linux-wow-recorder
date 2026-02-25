@@ -81,17 +81,26 @@ class RecordingMetadata:
         """Add a player death event.
 
         Shape matches WCR's PlayerDeathType:
-          { name, specId, date (ISO), timestamp (ms), friendly }
+          { name, specId, date (ISO), timestamp (seconds from video start), friendly }
+
+        'timestamp' in WCR is seconds elapsed from the encounter start, not epoch ms.
+        'date' is an ISO string of the absolute wall-clock time.
         """
-        # Convert ms timestamp to an ISO date string WCR expects
         from datetime import datetime, timezone
+
         date_iso = datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc).isoformat()
+
+        # Compute seconds from encounter start (what WCR's frontend expects)
+        if self.start_timestamp:
+            offset_secs = (timestamp_ms - self.start_timestamp) / 1000
+        else:
+            offset_secs = timestamp_ms / 1000  # fallback: treat as raw seconds
 
         self.deaths.append({
             "name": name,
-            "specId": spec_id,      # camelCase to match WCR PlayerDeathType
+            "specId": spec_id,
             "date": date_iso,
-            "timestamp": timestamp_ms,
+            "timestamp": offset_secs,
             "friendly": friendly,
         })
     
