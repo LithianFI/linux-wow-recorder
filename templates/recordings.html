@@ -129,7 +129,7 @@
                         <!-- Video element (no native controls) -->
                         <div class="aspect-video bg-black rounded-t-lg overflow-hidden">
                             <video x-ref="videoPlayer" class="w-full h-full"
-                                :src="selectedRecording ? '/video/' + encodeURIComponent(selectedRecording.name) : ''"
+                                :src="selectedRecording ? '/video/' + selectedRecording.name.split('/').map(encodeURIComponent).join('/') : ''"
                                 @timeupdate="onTimeUpdate()" @loadedmetadata="onVideoLoaded()"
                                 @ended="isPlaying = false" @pause="isPlaying = false" @play="isPlaying = true">
                             </video>
@@ -241,7 +241,7 @@
                             <span x-text="formatFullDate(selectedRecording?.modified)"></span>
                         </div>
                         <div class="flex gap-2 mt-4">
-                            <a :href="'/video/' + encodeURIComponent(selectedRecording?.name || '')" target="_blank"
+                            <a :href="'/video/' + (selectedRecording?.name || '').split('/').map(encodeURIComponent).join('/')" target="_blank"
                                 class="flex-1 py-2 px-4 bg-gray-700 hover:bg-gray-600 rounded-lg text-center transition-colors">
                                 Open in New Tab
                             </a>
@@ -348,10 +348,10 @@
 
                         // Fetch companion metadata
                         try {
-                            const res = await fetch('/api/recordings/' + encodeURIComponent(rec.name) + '/metadata');
+                            const res = await fetch('/api/recordings/' + rec.name.split('/').map(encodeURIComponent).join('/') + '/metadata');
                             if (res.ok) {
                                 this.recordingMetadata = await res.json();
-                                this.buildDeathMarkers(); // ← build markers once metadata arrives
+                                this.buildDeathMarkers();
                             }
                         } catch (e) {
                             console.warn('No metadata for', rec.name);
@@ -366,7 +366,7 @@
                         if (!this.deleteTarget) return;
 
                         try {
-                            const res = await fetch('/api/recordings/' + encodeURIComponent(this.deleteTarget.name), {
+                            const res = await fetch('/api/recordings/' + this.deleteTarget.name.split('/').map(encodeURIComponent).join('/'), {
                                 method: 'DELETE'
                             });
 

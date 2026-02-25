@@ -260,7 +260,7 @@
                                 </p>
                             </div>
                         </div>
-                        <a :href="'/video/' + encodeURIComponent(rec.name)" target="_blank" @click.stop
+                        <a :href="'/video/' + rec.name.split('/').map(encodeURIComponent).join('/')" target="_blank" @click.stop
                             class="p-2 text-gray-400 hover:text-amber-400 transition-colors shrink-0"
                             title="Open in new tab">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -278,6 +278,8 @@
             class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" @click.self="closePreview()"
             @keydown.escape.window="closePreview()">
             <div class="bg-gray-800 rounded-lg max-w-4xl w-full max-h-[90vh] flex flex-col">
+
+                <!-- Header -->
                 <div class="flex items-center justify-between p-4 border-b border-gray-700">
                     <h3 class="text-lg font-semibold text-gray-200 truncate pr-4" x-text="previewRecording?.name"></h3>
                     <button @click="closePreview()" class="p-1 text-gray-400 hover:text-white transition-colors">
@@ -287,20 +289,126 @@
                         </svg>
                     </button>
                 </div>
+
+                <!-- Video + custom controls -->
                 <div class="p-4 flex-1 min-h-0">
-                    <div class="aspect-video bg-black rounded-lg overflow-hidden">
-                        <video x-ref="previewPlayer" class="w-full h-full" controls
-                            :src="previewRecording ? '/video/' + encodeURIComponent(previewRecording.name) : ''">
-                        </video>
+                    <div>
+                        <!-- Video element -->
+                        <div class="aspect-video bg-black rounded-t-lg overflow-hidden">
+                            <video x-ref="previewPlayer" class="w-full h-full"
+                                :src="previewRecording ? '/video/' + previewRecording.name.split('/').map(encodeURIComponent).join('/') : ''"
+                                @timeupdate="previewOnTimeUpdate()"
+                                @loadedmetadata="previewOnVideoLoaded()"
+                                @ended="previewIsPlaying = false"
+                                @pause="previewIsPlaying = false"
+                                @play="previewIsPlaying = true">
+                            </video>
+                        </div>
+
+                        <!-- Custom controls bar -->
+                        <div class="bg-gray-900 rounded-b-lg px-3 pt-2 pb-3 select-none">
+
+                            <!-- Timeline -->
+                            <div class="relative h-5 flex items-center mb-2 group cursor-pointer"
+                                @click="previewSeekTo($event)"
+                                @mousemove="previewHoverSeek($event)"
+                                @mouseleave="previewSeekPreviewTime = null"
+                                x-ref="previewTimeline">
+
+                                <!-- Track background -->
+                                <div class="absolute inset-x-0 h-1.5 bg-gray-700 rounded-full"></div>
+
+                                <!-- Played portion -->
+                                <div class="absolute left-0 h-1.5 bg-amber-500 rounded-full pointer-events-none"
+                                    :style="'width:' + previewPlayedPercent + '%'"></div>
+
+                                <!-- Death markers -->
+                                <template x-for="(pct, i) in previewDeathMarkerPositions" :key="i">
+                                    <div class="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 group/marker"
+                                        :style="'left:' + pct + '%'">
+                                        <div class="w-4 h-4 rounded-full bg-red-600 border-2 border-red-300 flex items-center justify-center shadow-lg
+                                            opacity-80 group-hover/marker:opacity-100 transition-opacity cursor-pointer"
+                                            @click.stop="previewSeekToMarker(pct)">
+                                            <span class="text-[9px] leading-none">💀</span>
+                                        </div>
+                                        <!-- Tooltip -->
+                                        <div class="absolute bottom-6 left-1/2 -translate-x-1/2 bg-gray-900 text-gray-200
+                                            text-xs rounded px-2 py-1 whitespace-nowrap pointer-events-none
+                                            opacity-0 group-hover/marker:opacity-100 transition-opacity border border-gray-700 shadow-xl">
+                                            <span x-text="previewFormatTime(previewDeathTimesSeconds[i])"></span>
+                                            <template x-if="previewDeathNames[i]">
+                                                <span x-text="' – ' + previewDeathNames[i]"></span>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </template>
+
+                                <!-- Hover thumb -->
+                                <div x-show="previewSeekPreviewTime !== null"
+                                    class="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 bg-white rounded-full pointer-events-none shadow"
+                                    :style="'left:' + previewSeekPreviewPercent + '%'"></div>
+                            </div>
+
+                            <!-- Controls row -->
+                            <div class="flex items-center gap-3">
+
+                                <!-- Play/Pause -->
+                                <button @click="previewTogglePlay()" class="text-gray-300 hover:text-white transition-colors">
+                                    <svg x-show="!previewIsPlaying" class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M8 5v14l11-7z" />
+                                    </svg>
+                                    <svg x-show="previewIsPlaying" class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                                    </svg>
+                                </button>
+
+                                <!-- Mute -->
+                                <button @click="previewToggleMute()" class="text-gray-300 hover:text-white transition-colors">
+                                    <svg x-show="!previewIsMuted" class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z" />
+                                    </svg>
+                                    <svg x-show="previewIsMuted" class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" />
+                                    </svg>
+                                </button>
+
+                                <!-- Time -->
+                                <span class="text-xs text-gray-400 tabular-nums">
+                                    <span x-text="previewFormatTime(previewCurrentTime)"></span>
+                                    <span class="text-gray-600"> / </span>
+                                    <span x-text="previewFormatTime(previewDuration)"></span>
+                                </span>
+
+                                <div class="flex-1"></div>
+
+                                <!-- Death count badge -->
+                                <template x-if="previewDeathMarkerPositions.length > 0">
+                                    <span class="text-xs bg-red-600/30 text-red-400 border border-red-600/40 rounded-full px-2 py-0.5 flex items-center gap-1">
+                                        💀 <span x-text="previewDeathMarkerPositions.length"></span>
+                                    </span>
+                                </template>
+
+                                <!-- Fullscreen -->
+                                <button @click="$refs.previewPlayer.requestFullscreen()"
+                                    class="text-gray-300 hover:text-white transition-colors">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
+
+                <!-- Footer -->
                 <div class="flex items-center justify-between p-4 border-t border-gray-700">
                     <div class="text-sm text-gray-400">
                         <span x-text="formatFileSize(previewRecording?.size || 0)"></span>
                         <span class="mx-2">•</span>
                         <span x-text="formatFullDate(previewRecording?.modified)"></span>
                     </div>
-                    <a :href="'/video/' + encodeURIComponent(previewRecording?.name || '')" target="_blank"
+                    <a :href="'/video/' + (previewRecording?.name || '').split('/').map(encodeURIComponent).join('/')" target="_blank"
                         class="py-2 px-4 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition-colors">
                         Open in New Tab
                     </a>
@@ -403,6 +511,17 @@
                 events: [],
                 recordings: [],
                 previewRecording: null,
+                previewMetadata: null,
+                previewIsPlaying: false,
+                previewIsMuted: false,
+                previewCurrentTime: 0,
+                previewDuration: 0,
+                previewPlayedPercent: 0,
+                previewSeekPreviewTime: null,
+                previewSeekPreviewPercent: 0,
+                previewDeathMarkerPositions: [],
+                previewDeathTimesSeconds: [],
+                previewDeathNames: [],
 
                 cloudStatus: {
                     enabled: false,
@@ -522,13 +641,31 @@
                     return new Date(timestamp * 1000).toLocaleString();
                 },
 
-                openPreview(rec) {
+                async openPreview(rec) {
                     this.previewRecording = rec;
+                    this.previewMetadata = null;
+                    this.previewDeathMarkerPositions = [];
+                    this.previewDeathTimesSeconds = [];
+                    this.previewDeathNames = [];
+                    this.previewCurrentTime = 0;
+                    this.previewDuration = 0;
+                    this.previewPlayedPercent = 0;
+
                     this.$nextTick(() => {
                         if (this.$refs.previewPlayer) {
                             this.$refs.previewPlayer.load();
                         }
                     });
+
+                    try {
+                        const res = await fetch('/api/recordings/' + rec.name.split('/').map(encodeURIComponent).join('/') + '/metadata');
+                        if (res.ok) {
+                            this.previewMetadata = await res.json();
+                            this.previewBuildDeathMarkers();
+                        }
+                    } catch (e) {
+                        console.warn('No metadata for', rec.name);
+                    }
                 },
 
                 closePreview() {
@@ -536,6 +673,88 @@
                         this.$refs.previewPlayer.pause();
                     }
                     this.previewRecording = null;
+                    this.previewMetadata = null;
+                    this.previewDeathMarkerPositions = [];
+                    this.previewDeathTimesSeconds = [];
+                    this.previewDeathNames = [];
+                },
+
+                previewOnVideoLoaded() {
+                    this.previewDuration = this.$refs.previewPlayer.duration || 0;
+                    this.previewBuildDeathMarkers();
+                },
+
+                previewBuildDeathMarkers() {
+                    this.previewDeathMarkerPositions = [];
+                    this.previewDeathTimesSeconds = [];
+                    this.previewDeathNames = [];
+
+                    const meta = this.previewMetadata;
+                    if (!meta || !meta.deaths || meta.deaths.length === 0) return;
+                    if (!meta.start || !meta.duration) return;
+
+                    const durationMs = meta.duration * 1000;
+
+                    meta.deaths.forEach((death) => {
+                        const deathMs = typeof death === 'object' ? death.timestamp : death;
+                        const offsetMs = deathMs - meta.start;
+                        if (offsetMs < 0 || offsetMs > durationMs) return;
+
+                        this.previewDeathMarkerPositions.push((offsetMs / durationMs) * 100);
+                        this.previewDeathTimesSeconds.push(offsetMs / 1000);
+                        this.previewDeathNames.push(typeof death === 'object' ? (death.name || '') : '');
+                    });
+                },
+
+                previewOnTimeUpdate() {
+                    const v = this.$refs.previewPlayer;
+                    if (!v) return;
+                    this.previewCurrentTime = v.currentTime;
+                    this.previewPlayedPercent = this.previewDuration ? (v.currentTime / this.previewDuration) * 100 : 0;
+                },
+
+                previewTogglePlay() {
+                    const v = this.$refs.previewPlayer;
+                    if (!v) return;
+                    v.paused ? v.play() : v.pause();
+                },
+
+                previewToggleMute() {
+                    const v = this.$refs.previewPlayer;
+                    if (!v) return;
+                    v.muted = !v.muted;
+                    this.previewIsMuted = v.muted;
+                },
+
+                previewSeekTo(event) {
+                    const v = this.$refs.previewPlayer;
+                    const bar = this.$refs.previewTimeline;
+                    if (!v || !bar || !this.previewDuration) return;
+                    const rect = bar.getBoundingClientRect();
+                    const pct = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+                    v.currentTime = pct * this.previewDuration;
+                },
+
+                previewSeekToMarker(pct) {
+                    const v = this.$refs.previewPlayer;
+                    if (!v || !this.previewDuration) return;
+                    v.currentTime = (pct / 100) * this.previewDuration;
+                },
+
+                previewHoverSeek(event) {
+                    const bar = this.$refs.previewTimeline;
+                    if (!bar || !this.previewDuration) return;
+                    const rect = bar.getBoundingClientRect();
+                    const pct = Math.max(0, Math.min(100, ((event.clientX - rect.left) / rect.width) * 100));
+                    this.previewSeekPreviewPercent = pct;
+                    this.previewSeekPreviewTime = (pct / 100) * this.previewDuration;
+                },
+
+                previewFormatTime(secs) {
+                    if (!secs && secs !== 0) return '0:00';
+                    const m = Math.floor(secs / 60);
+                    const s = Math.floor(secs % 60).toString().padStart(2, '0');
+                    return `${m}:${s}`;
                 }
             };
         }
