@@ -5,6 +5,7 @@ Runs the recorder and web interface in a single process with WebSocket communica
 """
 
 import sys
+import json
 import time
 import signal
 import argparse
