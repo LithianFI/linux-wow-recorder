@@ -61,51 +61,46 @@ class RecordingProcessor:
     def process_encounter_end(self, boss_info: BossInfo, recording_duration: float,
                             metadata: Optional[RecordingMetadata] = None,
                             start_time: Optional[datetime] = None) -> bool:
-        """Stop recording and handle the recording file."""
-        if not self.config.is_difficulty_enabled(boss_info.difficulty_id):
-            diff_name = self.file_manager._get_difficulty_name(boss_info.difficulty_id)
-            return False
-        
+        """Stop recording and handle the recording file.
+
+        Difficulty filtering is handled upstream in process_encounter_start;
+        by the time this is called OBS is already recording so we always stop.
+        """
         print(f"{LOG_PREFIXES['PROC']} Stopping recording for: {boss_info.name}")
-        
-        # Stop OBS recording
+
         if not self.obs.stop_recording():
             print(f"{LOG_PREFIXES['PROC']} Failed to stop OBS recording")
             return False
-        
-        # Wait before file operations
+
         wait_time = self.config.RENAME_DELAY if hasattr(self.config, 'RENAME_DELAY') else DEFAULT_RENAME_DELAY
         time.sleep(wait_time)
-        
-        # Process the recording
+
         return self._process_recording_file(
-            boss_info=boss_info, 
+            boss_info=boss_info,
             recording_duration=recording_duration,
             metadata=metadata,
             start_time=start_time
         )
     
-    def process_dungeon_end(self, dungeon_info: DungeonInfo = None, recording_duration: float = 0, 
+    def process_dungeon_end(self, dungeon_info: DungeonInfo = None, recording_duration: float = 0,
                            reason: str = "", metadata: Optional[RecordingMetadata] = None,
                            start_time: Optional[datetime] = None) -> bool:
-        """Stop recording and handle the recording file for dungeon."""
-        if not self.config.RECORD_MPLUS:
-            return False
-        
+        """Stop recording and handle the recording file for dungeon.
+
+        M+ filtering is handled upstream in process_dungeon_start;
+        by the time this is called OBS is already recording so we always stop.
+        """
         print(f"{LOG_PREFIXES['PROC']} Stopping dungeon recording{f' ({reason})' if reason else ''}")
-        
-        # Stop OBS recording
+
         if not self.obs.stop_recording():
             print(f"{LOG_PREFIXES['PROC']} Failed to stop OBS recording")
             return False
-        
-        # Wait before file operations
+
         wait_time = self.config.RENAME_DELAY if hasattr(self.config, 'RENAME_DELAY') else DEFAULT_RENAME_DELAY
         time.sleep(wait_time)
-        
-        # Process the recording
+
         return self._process_recording_file(
-            dungeon_info=dungeon_info, 
+            dungeon_info=dungeon_info,
             recording_duration=recording_duration,
             metadata=metadata,
             start_time=start_time

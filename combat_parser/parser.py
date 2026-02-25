@@ -259,33 +259,34 @@ class CombatParser:
 
         print(f"{LOG_PREFIXES['PARSER']} Started M+ dungeon: {dungeon_info.name} (+{dungeon_info.dungeon_level})")
 
-    def _handle_dungeon_end(self, event: CombatEvent, reason: str = "dungeon_complete"):
-        """Handle CHALLENGE_MODE_END event."""
-        # Only process if we're in an active dungeon
+    def _handle_dungeon_end(self, event: Optional[CombatEvent], reason: str = "dungeon_complete"):
+        """Handle CHALLENGE_MODE_END event.
+
+        ``event`` may be None when called from a timeout or other synthetic
+        trigger; in that case success is always False and the current wall-clock
+        time is used as the timestamp.
+        """
         if not self.state.dungeon_active:
             return
 
-        # Get dungeon info and recording duration
         dungeon_name = self.state.dungeon_name
         dungeon_level = self.state.dungeon_level
         dungeon_duration = self.state.get_encounter_duration()
 
-        # Check success status from event fields
-        is_success, _ = event.get_dungeon_end_info()
+        # A real CHALLENGE_MODE_END carries the success flag; synthetic calls never succeed.
+        is_success = event.get_dungeon_end_info()[0] if event else False
+        timestamp = event.timestamp if event else datetime.now().strftime("%m/%d/%Y %H:%M:%S.0000")
 
-        # Create dungeon info for processing
         dungeon_info = DungeonInfo(
             dungeon_id=self.state.dungeon_id or 0,
             name=dungeon_name or "Unknown Dungeon",
             dungeon_level=dungeon_level or 0,
-            timestamp=event.timestamp
+            timestamp=timestamp
         )
 
-        # Update metadata with result
         self._finalize_metadata(is_kill=is_success, duration=dungeon_duration)
 
-        # Emit event for frontend
-        self._emit_event('DUNGEON_END', event.timestamp, {
+        self._emit_event('DUNGEON_END', timestamp, {
             'dungeon_name': dungeon_name,
             'dungeon_level': dungeon_level,
             'duration': round(dungeon_duration, 1),
@@ -296,10 +297,8 @@ class CombatParser:
         # Wait a moment before processing
         time.sleep(3)
 
-        # Process dungeon end in background thread
         self._start_thread(self._process_dungeon_end_thread, dungeon_info, dungeon_duration, reason)
 
-        # Reset state
         self.state.reset()
 
         print(f"{LOG_PREFIXES['PARSER']} Ended M+ dungeon: {dungeon_info.name} ({reason})")
@@ -331,10 +330,7 @@ class CombatParser:
         """Handle dungeon timeout due to inactivity."""
         if not self.state.dungeon_active:
             return
-
-        # Create a synthetic event for timeout
-        synthetic_event = CombatEvent(f"{datetime.now().strftime('%H:%M:%S')}  CHALLENGE_MODE_END,{self.state.dungeon_id},{self.state.dungeon_name},0,0")
-        self._handle_dungeon_end(synthetic_event, "timeout")
+        self._handle_dungeon_end(None, "timeout")
 
     def _handle_encounter_start(self, event: CombatEvent):
         """Handle ENCOUNTER_START event."""
@@ -533,7 +529,7 @@ class CombatParser:
             self.on_recording_saved({
                 'duration': duration,
                 'boss_name': f"{dungeon_info.name} +{dungeon_info.dungeon_level}",
-                'difficulty_id': 4,  # Mythic+
+                'difficulty_id': 8,  # Mythic+ internal difficulty ID
                 'is_kill': reason == 'dungeon_complete',
                 'category': 'dungeon',
             })
