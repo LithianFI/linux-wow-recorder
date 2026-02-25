@@ -213,6 +213,14 @@ class CombatParser:
                 self.player_spec_id = spec_id
                 print(f"{LOG_PREFIXES['PARSER']} Player specID: {spec_id}")
 
+                # ── Patch metadata if an encounter/dungeon is already underway ──
+                # _init_metadata_for_* runs at ENCOUNTER_START / CHALLENGE_MODE_START,
+                # before COMBATANT_INFO fires, so player_info may have spec_id=0.
+                # Update it here now that we have the real value.
+                if self.current_metadata.player_info:
+                    self.current_metadata.player_info["_specID"] = spec_id
+                    print(f"{LOG_PREFIXES['PARSER']} Metadata specID updated: {spec_id}")
+
         except (ValueError, IndexError):
             pass
 
