@@ -81,6 +81,30 @@ def get_status():
     status = build_status()
     return jsonify(status)
 
+@app.route('/api/recording/start', methods=['POST'])
+def start_manual_recording():
+    """Start a manual recording session."""
+    if not combat_parser:
+        return jsonify({'error': 'Recorder not initialized'}), 503
+    if state_manager and state_manager.is_recording:
+        return jsonify({'error': 'A recording is already active'}), 409
+    success = combat_parser.start_manual_recording()
+    if success:
+        return jsonify({'success': True, 'message': 'Manual recording started'})
+    return jsonify({'success': False, 'error': 'Failed to start recording'}), 500
+
+@app.route('/api/recording/stop', methods=['POST'])
+def stop_manual_recording():
+    """Stop an active manual recording session."""
+    if not combat_parser:
+        return jsonify({'error': 'Recorder not initialized'}), 503
+    if not (state_manager and state_manager.manual_recording):
+        return jsonify({'error': 'No manual recording is active'}), 409
+    success = combat_parser.stop_manual_recording()
+    if success:
+        return jsonify({'success': True, 'message': 'Manual recording stopped'})
+    return jsonify({'success': False, 'error': 'Failed to stop recording'}), 500
+
 
 @app.route('/api/config', methods=['GET'])
 def get_config():
@@ -554,6 +578,7 @@ def build_status() -> dict:
         summary = state_manager.summary()
         recorder_state = {
             'recording': summary.get('recording', False),
+            'manual_recording': summary.get('manual_recording', False), 
             'encounter_active': summary.get('encounter_active', False),
             'boss_name': summary.get('boss_name'),
             'boss_id': summary.get('boss_id'),

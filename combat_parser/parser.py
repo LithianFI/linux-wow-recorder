@@ -93,6 +93,67 @@ class CombatParser:
         # Grab specID from COMBATANT_INFO once we know the player GUID
         if self.player_guid and self.player_spec_id is None and 'COMBATANT_INFO' in line:
             self._parse_combatant_info(line)
+        
+    def start_manual_recording(self) -> bool:
+        """Start a manual recording triggered by the user."""
+        if self.state.is_recording or self.state.manual_recording:
+            print(f"{LOG_PREFIXES['PARSER']} Manual recording requested but already recording")
+            return False
+
+        print(f"{LOG_PREFIXES['PARSER']} Starting manual recording...")
+
+        if not self.obs.start_recording():
+            print(f"{LOG_PREFIXES['PARSER']} Failed to start OBS recording for manual session")
+            return False
+
+        self.state.start_manual_recording()
+        self.state.start_recording()
+        self.encounter_start_time = datetime.now()
+
+        # Reset metadata to a clean manual baseline
+        self.current_metadata.reset()
+        self.current_metadata.category = RecordingCategory.MANUAL
+        if self.player_guid and self.player_name:
+            self.current_metadata.set_player_info(
+            guid=self.player_guid,
+            name=self.player_name,
+            realm=self.player_realm or "Unknown",
+            spec_id=self.player_spec_id or 0,
+        )
+
+        self._emit_event('MANUAL_RECORDING_START', '', {'boss_name': 'Manual'})
+        print(f"{LOG_PREFIXES['PARSER']} Manual recording started")
+        return True
+
+
+    def stop_manual_recording(self) -> bool:
+        """Stop an active manual recording."""
+        if not self.state.manual_recording:
+            print(f"{LOG_PREFIXES['PARSER']} Stop manual recording requested but no manual recording active")
+            return False
+
+        print(f"{LOG_PREFIXES['PARSER']} Stopping manual recording...")
+        recording_duration = self.state.get_recording_duration()
+
+        boss_info = BossInfo(
+            boss_id=0,
+            name="Manual",
+            difficulty_id=0,
+            instance_id=0,
+            timestamp=datetime.now().strftime('%H:%M:%S'),
+        )
+
+        self._finalize_metadata(is_kill=True, duration=recording_duration)
+        self._emit_event('MANUAL_RECORDING_STOP', '', {'duration': round(recording_duration, 1)})
+
+        # Reset state before the background thread so is_recording becomes False immediately
+        self.state.reset()
+
+        # Reuse the existing encounter-end pipeline: stops OBS + renames file
+        self._start_thread(self._process_encounter_end_thread, boss_info, recording_duration)
+
+        print(f"{LOG_PREFIXES['PARSER']} Manual recording stopped ({recording_duration:.1f}s)")
+        return True    
 
 
     def _try_identify_player(self, line: str):
@@ -226,6 +287,9 @@ class CombatParser:
         # Don't start if already recording a dungeon
         if self.state.dungeon_active:
             return
+    
+        if self.state.manual_recording: 
+            return
 
         # Extract dungeon information
         dungeon_info = event.get_dungeon_info()
@@ -268,6 +332,9 @@ class CombatParser:
         time is used as the timestamp.
         """
         if not self.state.dungeon_active:
+            return
+        
+        if self.state.manual_recording: 
             return
 
         dungeon_name = self.state.dungeon_name
@@ -343,6 +410,9 @@ class CombatParser:
         # Don't start if already recording (either encounter or dungeon)
         if self.state.is_recording:
             return
+        
+        if self.state.manual_recording:  
+            return
 
         # Extract boss information
         boss_info = event.get_boss_info()
@@ -382,6 +452,8 @@ class CombatParser:
     def _handle_encounter_end(self, event: CombatEvent):
         """Handle ENCOUNTER_END event."""
         # Only process if we're in an active encounter
+        if self.state.manual_recording:  
+            return
         if not self.state.encounter_active:
             return
 
@@ -560,16 +632,22 @@ class CombatParser:
             print(f"{LOG_PREFIXES['PARSER']} Error reading log for encounter data: {e}")
             return
 
-        # Build GUID->name map from src/dest fields in every line.
+        # Build GUID->name map from src/dest fields in combat event lines.
         # Standard combat event format (after timestamp double-space):
         #   eventType, srcGUID, srcName, srcFlags, srcRaidFlags,
         #   destGUID, destName, destFlags, destRaidFlags, ...
+        # We skip COMBATANT_INFO lines because their field layout is different
+        # (field [2] is faction, not a name) and would corrupt the map.
         for line in window_lines:
             try:
                 ts_split = line.split('  ', 1)
                 if len(ts_split) < 2:
                     continue
-                parts = ts_split[1].split(',', 9)
+                event_data = ts_split[1]
+                # Skip COMBATANT_INFO - field layout is incompatible with src/dest parsing
+                if event_data.startswith('COMBATANT_INFO'):
+                    continue
+                parts = event_data.split(',', 9)
                 if len(parts) < 7:
                     continue
                 for guid_idx, name_idx in ((1, 2), (5, 6)):
@@ -580,7 +658,9 @@ class CombatParser:
                     if not raw_name or raw_name in ('nil', 'Unknown'):
                         continue
                     if guid not in guid_to_name:
-                        # Split "CharName-Realm-Region" -> (CharName, Realm)
+                        # Format: "CharName-Realm-EU" or "CharName-Realm-US" etc.
+                        # Strip the trailing region code (2-3 uppercase letters)
+                        # then split on the first '-' to get name vs realm.
                         name_parts = raw_name.split('-')
                         if len(name_parts) >= 3 and name_parts[-1].isupper() and len(name_parts[-1]) <= 3:
                             name = name_parts[0]

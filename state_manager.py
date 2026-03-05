@@ -69,6 +69,17 @@ class RecordingState:
         self.recording_start_time = time.time()
         print(f"{LOG_PREFIXES['STATE']} ⏺️ Recording marked as started")
     
+    def start_manual_recording(self):
+        """Mark a manual recording as started (triggered by the user)."""
+        self.manual_recording = True
+        self.encounter_active = True
+        self.boss_name = "Manual"
+        self.difficulty_id = 0
+        self.boss_id = 0
+        self.instance_id = 0
+        self.encounter_start_time = time.time()
+        print(f"{LOG_PREFIXES['STATE']} 🔴 Manual recording started")
+    
     def reset(self):
         """Reset state to default (encounter ended)."""
         print(f"{LOG_PREFIXES['STATE']} 🔄 Resetting state")
@@ -79,6 +90,8 @@ class RecordingState:
         # Recording state
         self.recording = False
         self.recording_start_time = None
+        
+        self.manual_recording = False    
         
         # Encounter state
         self.encounter_active = False
@@ -122,8 +135,7 @@ class RecordingState:
     
     @property
     def is_recording(self) -> bool:
-        """Check if currently recording."""
-        return self.recording and (self.encounter_active or self.dungeon_active)
+        return self.recording and (self.encounter_active or self.dungeon_active or self.manual_recording)
     
     @property
     def has_boss_info(self) -> bool:
@@ -189,6 +201,7 @@ class RecordingState:
         """
         return {
             'recording': self.recording,
+            'manual_recording': self.manual_recording, 
             'encounter_active': self.encounter_active,
             'boss_id': self.boss_id,
             'boss_name': self.boss_name,
