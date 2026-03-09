@@ -343,6 +343,11 @@ def delete_recording_endpoint(filename: str):
             return jsonify({'success': True, 'message': f'Deleted {filename}'})
         else:
             file_path.unlink()
+            # ── NEW: also remove the companion JSON sidecar if it exists ──
+            json_path = file_path.with_suffix('.json')
+            if json_path.exists():
+                json_path.unlink()
+                print(f"[RECORDINGS] Deleted companion JSON: {json_path.name}")
             return jsonify({'success': True, 'message': f'Deleted {filename}'})
 
     except Exception as e:

@@ -181,18 +181,25 @@ class RecordingFileManager:
             if not recording_path.exists():
                 print(f"[FILE] File already doesn't exist: {recording_path}")
                 return False
-            
+        
             # Get file info before deletion
             file_size = recording_path.stat().st_size
             file_size_mb = file_size / (1024 * 1024)
-            
+        
             # Delete the file
             recording_path.unlink()
-            
+        
             reason_text = f" ({reason})" if reason else ""
             print(f"[FILE] Deleted recording{reason_text}: {recording_path.name} ({file_size_mb:.2f}MB)")
+
+            # ── NEW: also remove the companion JSON sidecar if it exists ──
+            json_path = recording_path.with_suffix('.json')
+            if json_path.exists():
+                json_path.unlink()
+                print(f"[FILE] Deleted companion JSON: {json_path.name}")
+
             return True
-            
+        
         except Exception as e:
             print(f"[FILE] Error deleting recording: {e}")
             return False
