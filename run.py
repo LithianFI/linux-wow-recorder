@@ -201,132 +201,72 @@ def save_config():
 # Recordings
 # -----------------------------------------------------------------------------
 
-@app.route('/recordings')
-def recordings_page():
-    """Serve the recordings page."""
-    return render_template('recordings.html')
+class _PathTraversalError(Exception):
+    """Raised when a requested filename escapes the recordings directory."""
 
 
-def get_recording_directory() -> Optional[Path]:
-    """Get the recordings directory, with fallback to config."""
-    s = get_state()
-    if s.combat_parser and s.combat_parser.file_manager:
-        try:
-            record_dir = s.combat_parser.file_manager.get_recording_directory()
-            if record_dir and record_dir.exists():
-                return record_dir
-        except Exception as e:
-            print(f"[RECORDINGS] Error getting directory from file_manager: {e}")
+def _resolve_recording_path(record_dir: Path, filename: str) -> Path:
+    """Resolve filename relative to record_dir and guard against path traversal.
 
-    if s.config_manager and s.config_manager.RECORDING_PATH_FALLBACK:
-        fallback = s.config_manager.RECORDING_PATH_FALLBACK
-        if fallback.exists():
-            return fallback
-
-    return None
-
-
-def list_recording_files() -> list:
-    """List all recording files in the recordings directory (including date subfolders)."""
-    s = get_state()
-    record_dir = get_recording_directory()
-    if not record_dir or not record_dir.exists():
-        return []
-
-    ext = s.config_manager.RECORDING_EXTENSION.lower() if s.config_manager else '.mp4'
-    recordings = []
-
-    for file in record_dir.rglob(f'*{ext}'):
-        if file.is_file():
-            stat = file.stat()
-            recordings.append({
-                'name': str(file.relative_to(record_dir)),
-                'size': stat.st_size,
-                'modified': stat.st_mtime,
-            })
-
-    recordings.sort(key=lambda x: x['modified'], reverse=True)
-    return recordings
-
-
-@app.route('/api/recordings')
-def get_recordings():
-    """Get list of recordings."""
-    try:
-        recordings = list_recording_files()
-        record_dir = get_recording_directory()
-        return jsonify({
-            'recordings': recordings,
-            'directory': str(record_dir) if record_dir else None,
-        })
-    except Exception as e:
-        print(f"[RECORDINGS] Error in get_recordings: {e}")
-        return jsonify({'error': str(e)}), 500
+    Raises:
+        _PathTraversalError: if the resolved path is outside record_dir.
+    """
+    resolved = (record_dir / filename).resolve()
+    if not resolved.is_relative_to(record_dir.resolve()):
+        raise _PathTraversalError(filename)
+    return resolved
 
 
 @app.route('/api/recordings/<path:filename>', methods=['DELETE'])
 def delete_recording_endpoint(filename: str):
-    """Delete a recording file."""
+    s = get_state()
     try:
-        s = get_state()
         record_dir = get_recording_directory()
         if not record_dir:
             return jsonify({'error': 'Recording directory not available'}), 500
-
-        file_path = (record_dir / filename).resolve()
-
-        if not file_path.is_relative_to(record_dir.resolve()):
+        try:
+            file_path = _resolve_recording_path(record_dir, filename)
+        except _PathTraversalError:
             return jsonify({'error': 'Invalid path'}), 403
-
         if not file_path.exists():
             return jsonify({'error': 'File not found'}), 404
-
-        if s.combat_parser and s.combat_parser.file_manager and s.combat_parser.file_manager.delete_recording(file_path, reason="user request"):
+        if s.combat_parser and s.combat_parser.file_manager and \
+                s.combat_parser.file_manager.delete_recording(file_path, reason="user request"):
             return jsonify({'success': True, 'message': f'Deleted {filename}'})
         else:
             file_path.unlink()
             return jsonify({'success': True, 'message': f'Deleted {filename}'})
-
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 
 @app.route('/video/<path:filename>')
 def serve_video(filename: str):
-    """Serve a video file for preview."""
     from flask import send_file, abort
-
     record_dir = get_recording_directory()
     if not record_dir:
         abort(500)
-
-    file_path = (record_dir / filename).resolve()
-    resolved_record_dir = record_dir.resolve()
-
-    if not file_path.is_relative_to(resolved_record_dir):
+    try:
+        file_path = _resolve_recording_path(record_dir, filename)
+    except _PathTraversalError:
         abort(403)
-
     if not file_path.exists() or not file_path.is_file():
         abort(404)
-
     return send_file(file_path)
+
 
 @app.route('/api/recordings/<path:filename>/metadata')
 def get_recording_metadata(filename: str):
-    """Return the companion JSON metadata for a recording, if it exists."""
     record_dir = get_recording_directory()
     if not record_dir:
         return jsonify({'error': 'Recording directory not available'}), 500
-
-    video_path = (record_dir / filename).resolve()
-    if not video_path.is_relative_to(record_dir.resolve()):
+    try:
+        video_path = _resolve_recording_path(record_dir, filename)
+    except _PathTraversalError:
         return jsonify({'error': 'Invalid path'}), 403
-
     json_path = video_path.with_suffix('.json')
-
     if not json_path.exists():
         return jsonify({'error': 'No metadata found'}), 404
-
     try:
         with open(json_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
@@ -335,6 +275,37 @@ def get_recording_metadata(filename: str):
         print(f"[RECORDINGS] Error reading metadata for {filename}: {e}")
         return jsonify({'error': str(e)}), 500
 
+
+@app.route('/api/cloud/upload/<path:filename>', methods=['POST'])
+def queue_cloud_upload(filename: str):
+    s = get_state()
+    if not s.cloud_manager or not s.cloud_manager.is_ready():
+        return jsonify({'error': 'Cloud upload not available'}), 503
+    try:
+        record_dir = get_recording_directory()
+        if not record_dir:
+            return jsonify({'error': 'Recording directory not available'}), 500
+        try:
+            file_path = _resolve_recording_path(record_dir, filename)
+        except _PathTraversalError:
+            return jsonify({'error': 'Invalid path'}), 403
+        if not file_path.exists():
+            return jsonify({'error': 'File not found'}), 404
+        stem = file_path.stem
+        parts = stem.split('_')
+        boss_name = parts[2] if len(parts) >= 4 else None
+        difficulty = parts[3] if len(parts) >= 4 else None
+        success = s.cloud_manager.queue_upload(
+            file_path=file_path,
+            boss_name=boss_name,
+            difficulty=difficulty,
+            category='manual',
+        )
+        if success:
+            return jsonify({'success': True, 'message': f'Queued {filename} for upload'})
+        return jsonify({'success': False, 'error': 'Failed to queue upload'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 # ============================================================================
 # Cloud Upload API Routes
@@ -389,51 +360,6 @@ async def _test_cloud_connection_async():
         return {'success': False, 'error': 'Failed to connect'}
     except Exception as e:
         return {'success': False, 'error': str(e)}
-
-
-@app.route('/api/cloud/upload/<path:filename>', methods=['POST'])
-def queue_cloud_upload(filename: str):
-    """Queue a specific recording for cloud upload."""
-    s = get_state()
-    if not s.cloud_manager or not s.cloud_manager.is_ready():
-        return jsonify({'error': 'Cloud upload not available'}), 503
-
-    try:
-        record_dir = get_recording_directory()
-        if not record_dir:
-            return jsonify({'error': 'Recording directory not available'}), 500
-
-        file_path = (record_dir / filename).resolve()
-
-        if not file_path.is_relative_to(record_dir.resolve()):
-            return jsonify({'error': 'Invalid path'}), 403
-
-        if not file_path.exists():
-            return jsonify({'error': 'File not found'}), 404
-
-        stem = file_path.stem
-        parts = stem.split('_')
-
-        boss_name = None
-        difficulty = None
-        if len(parts) >= 4:
-            boss_name = parts[2]
-            difficulty = parts[3]
-
-        success = s.cloud_manager.queue_upload(
-            file_path=file_path,
-            boss_name=boss_name,
-            difficulty=difficulty,
-            category='manual',
-        )
-
-        if success:
-            return jsonify({'success': True, 'message': f'Queued {filename} for upload'})
-        else:
-            return jsonify({'success': False, 'error': 'Failed to queue upload'}), 500
-
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
 
 
 # -----------------------------------------------------------------------------
