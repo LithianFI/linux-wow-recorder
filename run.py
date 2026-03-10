@@ -191,76 +191,8 @@ def save_config():
 
     try:
         data = request.get_json()
-        cm = s.config_manager
-
-        if 'general' in data:
-            general = data['general']
-            if 'log_dir' in general:
-                cm.config.set('General', 'log_dir', general['log_dir'])
-            if 'log_pattern' in general:
-                cm.config.set('General', 'log_pattern', general['log_pattern'])
-            if 'recording_extension' in general:
-                cm.config.set('General', 'recording_extension', general['recording_extension'])
-
-        if 'obs' in data:
-            obs = data['obs']
-            if 'host' in obs:
-                cm.config.set('OBS', 'host', obs['host'])
-            if 'port' in obs:
-                cm.config.set('OBS', 'port', str(obs['port']))
-            if 'password' in obs:
-                cm.config.set('OBS', 'password', obs['password'])
-
-        if 'recording' in data:
-            recording = data['recording']
-            if 'auto_rename' in recording:
-                cm.config.set('Recording', 'auto_rename', str(recording['auto_rename']).lower())
-            if 'rename_delay' in recording:
-                cm.config.set('Recording', 'rename_delay', str(recording['rename_delay']))
-            if 'max_rename_attempts' in recording:
-                cm.config.set('Recording', 'max_rename_attempts', str(recording['max_rename_attempts']))
-            if 'min_recording_duration' in recording:
-                cm.config.set('Recording', 'min_recording_duration', str(recording['min_recording_duration']))
-            if 'delete_short_recordings' in recording:
-                cm.config.set('Recording', 'delete_short_recordings', str(recording['delete_short_recordings']).lower())
-
-        if 'difficulties' in data:
-            difficulties = data['difficulties']
-            if 'record_lfr' in difficulties:
-                cm.config.set('Difficulties', 'record_lfr', str(difficulties['record_lfr']).lower())
-            if 'record_normal' in difficulties:
-                cm.config.set('Difficulties', 'record_normal', str(difficulties['record_normal']).lower())
-            if 'record_heroic' in difficulties:
-                cm.config.set('Difficulties', 'record_heroic', str(difficulties['record_heroic']).lower())
-            if 'record_mythic' in difficulties:
-                cm.config.set('Difficulties', 'record_mythic', str(difficulties['record_mythic']).lower())
-            if 'record_other' in difficulties:
-                cm.config.set('Difficulties', 'record_other', str(difficulties['record_other']).lower())
-            if 'record_mplus' in difficulties:
-                cm.config.set('Difficulties', 'record_mplus', str(difficulties['record_mplus']).lower())
-
-        if 'cloud_upload' in data:
-            cloud = data['cloud_upload']
-            if 'enabled' in cloud:
-                cm.config.set('CloudUpload', 'enabled', str(cloud['enabled']).lower())
-            if 'provider' in cloud:
-                cm.config.set('CloudUpload', 'provider', cloud['provider'])
-            if 'auto_upload' in cloud:
-                cm.config.set('CloudUpload', 'auto_upload', str(cloud['auto_upload']).lower())
-            if 'delete_after_upload' in cloud:
-                cm.config.set('CloudUpload', 'delete_after_upload', str(cloud['delete_after_upload']).lower())
-            if 'upload_on_startup' in cloud:
-                cm.config.set('CloudUpload', 'upload_on_startup', str(cloud['upload_on_startup']).lower())
-            if 'wcr_username' in cloud:
-                cm.config.set('CloudUpload', 'wcr_username', cloud['wcr_username'])
-            if 'wcr_password' in cloud:
-                cm.config.set('CloudUpload', 'wcr_password', cloud['wcr_password'])
-            if 'wcr_guild' in cloud:
-                cm.config.set('CloudUpload', 'wcr_guild', cloud['wcr_guild'])
-
-        cm.save()
+        s.config_manager.update_from_dict(data)
         return jsonify({'success': True, 'message': 'Configuration saved'})
-
     except Exception as e:
         return jsonify({'error': str(e)}), 400
 
