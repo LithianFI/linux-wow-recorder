@@ -17,6 +17,9 @@ class RecordingCategory:
 
 
 class RecordingMetadata:
+    def __init__(self):
+        self.reset()
+        
     def reset(self):
         """Reset metadata for a new recording."""
         self.category = RecordingCategory.MANUAL
