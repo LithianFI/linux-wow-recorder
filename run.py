@@ -306,6 +306,64 @@ def queue_cloud_upload(filename: str):
         return jsonify({'success': False, 'error': 'Failed to queue upload'}), 500
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+    
+@app.route('/recordings')
+def recordings_page():
+    return render_template('recordings.html')
+
+
+def get_recording_directory() -> Optional[Path]:
+    s = get_state()
+    if s.combat_parser and s.combat_parser.file_manager:
+        try:
+            record_dir = s.combat_parser.file_manager.get_recording_directory()
+            if record_dir and record_dir.exists():
+                return record_dir
+        except Exception as e:
+            print(f"[RECORDINGS] Error getting directory from file_manager: {e}")
+
+    if s.config_manager and s.config_manager.RECORDING_PATH_FALLBACK:
+        fallback = s.config_manager.RECORDING_PATH_FALLBACK
+        if fallback.exists():
+            return fallback
+
+    return None
+
+
+def list_recording_files() -> list:
+    s = get_state()
+    record_dir = get_recording_directory()
+    if not record_dir or not record_dir.exists():
+        return []
+
+    ext = s.config_manager.RECORDING_EXTENSION.lower() if s.config_manager else '.mp4'
+    recordings = []
+
+    for file in record_dir.rglob(f'*{ext}'):
+        if file.is_file():
+            stat = file.stat()
+            recordings.append({
+                'name': str(file.relative_to(record_dir)),
+                'size': stat.st_size,
+                'modified': stat.st_mtime,
+            })
+
+    recordings.sort(key=lambda x: x['modified'], reverse=True)
+    return recordings
+
+
+@app.route('/api/recordings')
+def get_recordings():
+    try:
+        recordings = list_recording_files()
+        record_dir = get_recording_directory()
+        return jsonify({
+            'recordings': recordings,
+            'directory': str(record_dir) if record_dir else None,
+        })
+    except Exception as e:
+        print(f"[RECORDINGS] Error in get_recordings: {e}")
+        return jsonify({'error': str(e)}), 500
 
 # ============================================================================
 # Cloud Upload API Routes
