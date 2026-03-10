@@ -16,6 +16,7 @@ from combat_parser.events import CombatEvent, BossInfo, DungeonInfo
 from combat_parser.file_manager import RecordingFileManager
 from combat_parser.recording_processor import RecordingProcessor
 from combat_parser.dungeon_monitor import DungeonMonitor
+from combat_parser.events import CombatEvent, BossInfo, DungeonInfo, parse_player_name_realm
 from metadata_generator import RecordingMetadata, RecordingCategory, DeathParser
 
 from constants import LOG_PREFIXES
@@ -210,24 +211,7 @@ class CombatParser:
                 # e.g. "Isalith-Ravencrest-EU"
                 # We want CharName and RealmName, dropping the trailing region code.
                 # Region codes are always 2-3 uppercase letters (EU, US, TW, KR, CN).
-                name_parts = raw_name.split('-')
-
-                if len(name_parts) >= 3:
-                    # Check if the last part looks like a region code
-                    region_code = name_parts[-1]
-                    if region_code.isupper() and len(region_code) <= 3:
-                        name = name_parts[0]
-                        realm = '-'.join(name_parts[1:-1])  # realm may itself contain hyphens
-                    else:
-                        name = name_parts[0]
-                        realm = '-'.join(name_parts[1:])
-                elif len(name_parts) == 2:
-                    name = name_parts[0]
-                    realm = name_parts[1]
-                else:
-                    name = raw_name
-                    realm = 'Unknown'
-
+                name, realm = parse_player_name_realm(raw_name)
                 if not name:
                     continue
 
@@ -661,16 +645,7 @@ class CombatParser:
                         # Format: "CharName-Realm-EU" or "CharName-Realm-US" etc.
                         # Strip the trailing region code (2-3 uppercase letters)
                         # then split on the first '-' to get name vs realm.
-                        name_parts = raw_name.split('-')
-                        if len(name_parts) >= 3 and name_parts[-1].isupper() and len(name_parts[-1]) <= 3:
-                            name = name_parts[0]
-                            realm = '-'.join(name_parts[1:-1])
-                        elif len(name_parts) == 2:
-                            name = name_parts[0]
-                            realm = name_parts[1]
-                        else:
-                            name = raw_name
-                            realm = 'Unknown'
+                        name, realm = parse_player_name_realm(raw_name)
                         guid_to_name[guid] = (name, realm)
             except Exception:
                 continue

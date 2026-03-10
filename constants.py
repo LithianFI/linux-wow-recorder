@@ -1,3 +1,5 @@
+import os
+import secrets
 """
 Application-wide constants for WoW Raid Recorder.
 """
@@ -77,7 +79,7 @@ DEFAULT_OBS_TIMEOUT = 3                     # Used by OBSClient
 # Web server defaults
 DEFAULT_WEB_HOST = '0.0.0.0'                # Used by run.py
 DEFAULT_WEB_PORT = 5001                     # Used by run.py
-FLASK_SECRET_KEY = 'wow-recorder-secret'    # Used by run.py
+FLASK_SECRET_KEY = os.environ.get('WOW_RECORDER_SECRET') or secrets.token_hex(32)   # Used by run.py
 
 # Event log size
 MAX_EVENT_LOG_SIZE = 50                     # Used by run.py and AppState

@@ -61,6 +61,31 @@ class DungeonInfo:
         cleaned = cleaned.replace("-", "_")
         return cleaned.strip()
 
+def parse_player_name_realm(raw_name: str) -> tuple[str, str]:
+    """Parse a raw WoW player name string into (name, realm).
+
+    WoW names in combat logs follow the format "CharName-RealmName-Region"
+    where the region code is 2-3 uppercase letters (EU, US, TW, KR, CN).
+    The realm itself may contain hyphens (e.g. "Azjol-Nerub").
+
+    Returns ('', 'Unknown') if the name is empty or unparseable.
+    """
+    if not raw_name or raw_name in ('nil', 'Unknown'):
+        return '', 'Unknown'
+
+    parts = raw_name.split('-')
+
+    if len(parts) >= 3:
+        region = parts[-1]
+        if region.isupper() and len(region) <= 3:
+            return parts[0], '-'.join(parts[1:-1])
+        else:
+            return parts[0], '-'.join(parts[1:])
+    elif len(parts) == 2:
+        return parts[0], parts[1]
+    else:
+        return raw_name, 'Unknown'
+
 
 class CombatEvent:
     """Represents a parsed combat log event."""

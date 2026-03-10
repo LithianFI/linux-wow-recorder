@@ -2,6 +2,7 @@
 Recording file management operations.
 """
 
+import re
 import time
 from datetime import datetime
 from pathlib import Path
@@ -302,8 +303,7 @@ class RecordingFileManager:
         date_str: Optional[str] = None
 
         # Filenames produced by generate_filename start with YYYY-MM-DD_
-        import re as _re
-        m = _re.match(r'^(\d{4}-\d{2}-\d{2})_', file_path.name)
+        m = re.match(r'^(\d{4}-\d{2}-\d{2})_', file_path.name)
         if m:
             date_str = m.group(1)
         else:
