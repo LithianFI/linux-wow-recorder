@@ -11,6 +11,7 @@ from threading import Thread
 from cloud_upload import (
     CloudUploadProvider,
     WarcraftRecorderCloud,
+    GoogleDriveUpload, 
     CloudUploadQueue,
     VideoMetadata,
     UploadProgress,
@@ -48,9 +49,12 @@ class CloudUploadManager:
 
         if provider_name == 'warcraft_recorder':
             success = await self._init_warcraft_recorder()
+        elif provider_name == 'google_drive':
+            success = await self._init_google_drive()
         else:
             print(f"[Cloud Manager] Unknown/unsupported provider: {provider_name}")
             return False
+
 
         if success:
             self.upload_queue = CloudUploadQueue(self.provider)
@@ -87,6 +91,30 @@ class CloudUploadManager:
             print(f"[Cloud Manager] Storage: {storage_info['usage_gb']}GB / {storage_info['limit_gb']}GB "
                   f"({storage_info['usage_percent']}%)")
         
+        return authenticated
+    
+    async def _init_google_drive(self) -> bool:
+        """Initialize Google Drive cloud provider."""
+        credentials_file = self.config.GDRIVE_CREDENTIALS_FILE
+        folder_id = self.config.GDRIVE_FOLDER_ID
+
+        if not credentials_file:
+            print("[Cloud Manager] ❌ gdrive_credentials_file not set in config")
+            return False
+
+        print(f"[Cloud Manager] Initializing Google Drive "
+              f"(folder: {folder_id or 'My Drive root'})")
+
+        self.provider = GoogleDriveUpload(credentials_file, folder_id)
+        authenticated = await self.provider.authenticate()
+
+        if authenticated:
+            storage_info = self.provider.get_storage_info()
+            if storage_info.get('limit_gb'):
+                print(f"[Cloud Manager] Storage: {storage_info['usage_gb']}GB "
+                      f"/ {storage_info['limit_gb']}GB "
+                      f"({storage_info['usage_percent']}%)")
+
         return authenticated
     
     def queue_upload(self, file_path: Path, metadata: 'VideoMetadata') -> bool:

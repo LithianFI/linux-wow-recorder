@@ -306,7 +306,7 @@
                             <select x-model="config.cloud_upload.provider"
                                 class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent">
                                 <option value="warcraft_recorder">Warcraft Recorder Cloud</option>
-                                <option value="google_drive" disabled>Google Drive (Coming Soon)</option>
+                                <option value="google_drive">Google Drive</option>
                                 <option value="proton_drive" disabled>Proton Drive (Coming Soon)</option>
                             </select>
                         </div>
@@ -351,6 +351,63 @@
                                 <input type="text" x-model="config.cloud_upload.wcr_guild" placeholder="Your guild name"
                                     class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent">
                                 <p class="text-xs text-gray-500 mt-1">The guild/bucket to upload recordings to</p>
+                            </div>
+                        </div>
+
+                        <!-- Google Drive Settings -->
+                        <div x-show="config.cloud_upload.provider === 'google_drive'" class="space-y-3">
+                            <div class="bg-blue-900/20 border border-blue-500/30 rounded-lg p-3 text-sm">
+                                <div class="flex items-start gap-2">
+                                    <svg class="w-5 h-5 text-blue-400 mt-0.5 shrink-0" fill="none" stroke="currentColor"
+                                        viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    <div>
+                                        <p class="text-blue-300 font-medium mb-1">Google Drive OAuth2 Setup Required</p>
+                                        <p class="text-blue-200/70">
+                                            Create an OAuth2 <strong class="text-blue-300">Desktop app</strong>
+                                            credential in the
+                                            <a href="https://console.cloud.google.com/apis/credentials" target="_blank"
+                                                class="text-blue-400 hover:text-blue-300 underline">Google Cloud
+                                                Console</a>,
+                                            enable the Drive API, download the client secrets JSON, and enter its path
+                                            below.
+                                            A browser window will open once for authorisation.
+                                        </p>
+                                        <p class="text-blue-200/70 mt-1">
+                                            Required:
+                                            <code class="bg-gray-900 text-amber-300 px-1 rounded text-xs">
+                        pip install google-auth google-auth-oauthlib google-api-python-client
+                    </code>
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-300 mb-1">Client Secrets File</label>
+                                <input type="text" x-model="config.cloud_upload.gdrive_credentials_file"
+                                    placeholder="/path/to/client_secrets.json" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2
+                   focus:ring-2 focus:ring-amber-500 focus:border-transparent font-mono text-sm">
+                                <p class="text-xs text-gray-500 mt-1">
+                                    Full path to the OAuth2 client secrets JSON downloaded from Google Cloud Console.
+                                </p>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-300 mb-1">
+                                    Drive Folder ID
+                                    <span class="text-gray-500 font-normal">(optional)</span>
+                                </label>
+                                <input type="text" x-model="config.cloud_upload.gdrive_folder_id"
+                                    placeholder="Leave empty to upload to My Drive root" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2
+                   focus:ring-2 focus:ring-amber-500 focus:border-transparent font-mono text-sm">
+                                <p class="text-xs text-gray-500 mt-1">
+                                    The ID at the end of the folder URL:
+                                    <code
+                                        class="text-amber-400/70">drive.google.com/drive/folders/<strong>THIS_PART</strong></code>
+                                </p>
                             </div>
                         </div>
 
@@ -484,6 +541,8 @@
                         wcr_username: '',
                         wcr_password: '',
                         wcr_guild: '',
+                        gdrive_credentials_file: '',
+                        gdrive_folder_id: '',
                     }
 
                 },
@@ -506,6 +565,8 @@
                                 wcr_username: '',
                                 wcr_password: '',
                                 wcr_guild: '',
+                                gdrive_credentials_file: data.cloud_upload?.gdrive_credentials_file ?? '',
+                                gdrive_folder_id: data.cloud_upload?.gdrive_folder_id ?? '',
                             };
                         }
 

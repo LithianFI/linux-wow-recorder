@@ -115,6 +115,8 @@ class ConfigManager:
             'wcr_username':        str,
             'wcr_password':        str,
             'wcr_guild':           str,
+            'gdrive_credentials_file': str,  
+            'gdrive_folder_id':        str,  
         }),
     }
 
@@ -267,8 +269,10 @@ wcr_username =
 wcr_password =
 wcr_guild =
 
-# Google Drive settings (future)
-gdrive_enabled = false
+# Google Drive settings
+# credentials_file: path to OAuth2 client secrets JSON from Google Cloud Console
+# folder_id: Drive folder ID to upload into (leave empty for My Drive root)
+gdrive_credentials_file =
 gdrive_folder_id =
 
 # Proton Drive settings (future)
@@ -472,6 +476,10 @@ proton_folder =
     @property
     def GDRIVE_FOLDER_ID(self) -> str:
         return self.config.get('CloudUpload', 'gdrive_folder_id', fallback='', raw=True)
+    
+    @property
+    def GDRIVE_CREDENTIALS_FILE(self) -> str:
+        return self.config.get('CloudUpload', 'gdrive_credentials_file', fallback='', raw=True)
 
     @property
     def PROTON_ENABLED(self) -> bool:
