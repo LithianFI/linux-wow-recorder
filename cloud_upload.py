@@ -642,3 +642,288 @@ class CloudUploadQueue:
             'completed_count': len(self.completed),
             'failed_count': len(self.failed),
         }
+# =============================================================================
+# Google Drive Upload Provider
+# =============================================================================
+
+class GoogleDriveUpload(CloudUploadProvider):
+    """
+    Upload provider for Google Drive using OAuth2 (installed-app flow).
+
+    Authentication:
+      On first run, opens the user's browser for one-time OAuth2 consent.
+      The token is cached at ~/.wow_raid_recorder_gdrive_token.json so all
+      subsequent launches authenticate silently.
+
+    Upload flow (Drive resumable upload — handles large video files):
+      1. POST https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable
+         → response Location header contains the session URI.
+      2. PUT session URI in CHUNK_SIZE chunks, reporting progress after each.
+
+    Dependencies (install once):
+      pip install google-auth google-auth-oauthlib google-auth-httplib2 google-api-python-client
+    """
+
+    SCOPES = ['https://www.googleapis.com/auth/drive.file']
+    TOKEN_FILE = Path.home() / '.wow_raid_recorder_gdrive_token.json'
+    CHUNK_SIZE = 8 * 1024 * 1024   # 8 MB per chunk
+
+    def __init__(self, credentials_file: str, folder_id: str = ''):
+        """
+        Args:
+            credentials_file: Path to the OAuth2 client secrets JSON file
+                               downloaded from Google Cloud Console
+                               (Application type: Desktop app).
+            folder_id:         Google Drive folder ID to upload into.
+                               Leave empty to upload to the root of My Drive.
+        """
+        self.credentials_file = Path(credentials_file)
+        self.folder_id = folder_id.strip()
+        self._creds = None
+        self._authenticated = False
+        self._quota_used: int = 0
+        self._quota_limit: int = 0
+
+    # ------------------------------------------------------------------
+    # CloudUploadProvider interface
+    # ------------------------------------------------------------------
+
+    async def authenticate(self) -> bool:
+        try:
+            self._check_dependencies()
+        except ImportError as e:
+            print(f"[GDrive] ❌ Missing dependency: {e}")
+            print("[GDrive]  → Install with: pip install google-auth google-auth-oauthlib "
+                  "google-auth-httplib2 google-api-python-client")
+            return False
+
+        if not self.credentials_file.exists():
+            print(f"[GDrive] ❌ Credentials file not found: {self.credentials_file}")
+            print("[GDrive]  → Download OAuth2 client secrets (Desktop app) from "
+                  "https://console.cloud.google.com/apis/credentials")
+            return False
+
+        try:
+            from google.oauth2.credentials import Credentials
+            from google_auth_oauthlib.flow import InstalledAppFlow
+            from google.auth.transport.requests import Request
+
+            creds = None
+            if self.TOKEN_FILE.exists():
+                creds = Credentials.from_authorized_user_file(
+                    str(self.TOKEN_FILE), self.SCOPES)
+
+            if not creds or not creds.valid:
+                if creds and creds.expired and creds.refresh_token:
+                    print("[GDrive] Refreshing expired token...")
+                    creds.refresh(Request())
+                else:
+                    print("[GDrive] Opening browser for OAuth2 authorisation...")
+                    flow = InstalledAppFlow.from_client_secrets_file(
+                        str(self.credentials_file), self.SCOPES)
+                    creds = flow.run_local_server(port=0)
+
+                with open(self.TOKEN_FILE, 'w') as f:
+                    f.write(creds.to_json())
+                print(f"[GDrive] Token cached at {self.TOKEN_FILE}")
+
+            self._creds = creds
+            self._authenticated = True
+
+            try:
+                self._fetch_quota()
+            except Exception as e:
+                print(f"[GDrive] Warning: could not fetch quota: {e}")
+
+            print("[GDrive] ✅ Authenticated successfully")
+            if self._quota_limit:
+                used_gb = self._quota_used / (1024 ** 3)
+                limit_gb = self._quota_limit / (1024 ** 3)
+                print(f"[GDrive] Storage: {used_gb:.2f} GB / {limit_gb:.2f} GB")
+            return True
+
+        except Exception as e:
+            print(f"[GDrive] ❌ Authentication error: {e}")
+            return False
+
+    def is_authenticated(self) -> bool:
+        return self._authenticated and self._creds is not None
+
+    def get_storage_info(self) -> Dict[str, Any]:
+        limit = self._quota_limit or 0
+        used = self._quota_used or 0
+        return {
+            'usage_bytes': used,
+            'limit_bytes': limit,
+            'usage_gb': round(used / (1024 ** 3), 2),
+            'limit_gb': round(limit / (1024 ** 3), 2),
+            'usage_percent': round(used / limit * 100, 2) if limit else 0,
+            'can_write': self._authenticated,
+            'can_delete': False,
+        }
+
+    async def upload_video(self, file_path: Path, metadata: VideoMetadata,
+                           progress_callback=None) -> bool:
+        if not self.is_authenticated():
+            print("[GDrive] Not authenticated")
+            return False
+
+        if not file_path.exists():
+            print(f"[GDrive] File not found: {file_path}")
+            return False
+
+        file_size = file_path.stat().st_size
+        progress = UploadProgress(
+            video_name=metadata.video_key,
+            total_bytes=file_size,
+            uploaded_bytes=0,
+            status='uploading',
+            start_time=time.time(),
+        )
+
+        try:
+            print(f"[GDrive] Uploading {metadata.video_key} ({file_size / (1024**2):.1f} MB)")
+            session_uri = self._initiate_resumable_upload(file_path, metadata)
+            if not session_uri:
+                raise RuntimeError("Failed to obtain resumable upload session URI")
+
+            success = self._execute_resumable_upload(
+                file_path, file_size, session_uri, progress, progress_callback)
+
+            if success:
+                progress.status = 'completed'
+                progress.uploaded_bytes = file_size
+                if progress_callback:
+                    progress_callback(progress)
+                print(f"[GDrive] ✅ Upload complete: {metadata.video_key}")
+            else:
+                progress.status = 'failed'
+                if progress_callback:
+                    progress_callback(progress)
+
+            return success
+
+        except Exception as e:
+            print(f"[GDrive] ❌ Upload error: {e}")
+            progress.status = 'failed'
+            progress.error = str(e)
+            if progress_callback:
+                progress_callback(progress)
+            return False
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _check_dependencies():
+        import google.oauth2.credentials          # noqa: F401
+        import google_auth_oauthlib.flow          # noqa: F401
+        import google.auth.transport.requests     # noqa: F401
+
+    def _auth_header(self) -> Dict[str, str]:
+        """Return Bearer auth header, auto-refreshing the token if expired."""
+        from google.auth.transport.requests import Request
+        if self._creds.expired and self._creds.refresh_token:
+            self._creds.refresh(Request())
+        return {'Authorization': f'Bearer {self._creds.token}'}
+
+    def _fetch_quota(self):
+        resp = requests.get(
+            'https://www.googleapis.com/drive/v3/about',
+            params={'fields': 'storageQuota'},
+            headers=self._auth_header(),
+            timeout=10,
+        )
+        if resp.status_code == 200:
+            q = resp.json().get('storageQuota', {})
+            self._quota_used = int(q.get('usageInDrive', 0))
+            self._quota_limit = int(q.get('limit', 0))
+
+    def _initiate_resumable_upload(self, file_path: Path,
+                                   metadata: VideoMetadata) -> Optional[str]:
+        """POST to Drive resumable endpoint; returns session URI or None."""
+        ext = file_path.suffix.lower()
+        mime = 'video/mp4' if ext == '.mp4' else 'application/octet-stream'
+        file_size = file_path.stat().st_size
+
+        file_meta: Dict[str, Any] = {'name': file_path.name}
+        if self.folder_id:
+            file_meta['parents'] = [self.folder_id]
+
+        headers = {
+            **self._auth_header(),
+            'Content-Type': 'application/json; charset=UTF-8',
+            'X-Upload-Content-Type': mime,
+            'X-Upload-Content-Length': str(file_size),
+        }
+
+        resp = requests.post(
+            'https://www.googleapis.com/upload/drive/v3/files',
+            params={'uploadType': 'resumable'},
+            headers=headers,
+            json=file_meta,
+            timeout=30,
+        )
+
+        if resp.status_code != 200:
+            print(f"[GDrive] Failed to initiate resumable upload: "
+                  f"{resp.status_code} {resp.text[:300]}")
+            return None
+
+        session_uri = resp.headers.get('Location')
+        if not session_uri:
+            print("[GDrive] Missing Location header in resumable upload response")
+        return session_uri
+
+    def _execute_resumable_upload(self, file_path: Path, file_size: int,
+                                  session_uri: str, progress: UploadProgress,
+                                  progress_callback) -> bool:
+        """Stream file to Drive in chunks, updating progress after each."""
+        ext = file_path.suffix.lower()
+        mime = 'video/mp4' if ext == '.mp4' else 'application/octet-stream'
+        uploaded = 0
+
+        with open(file_path, 'rb') as f:
+            while uploaded < file_size:
+                chunk = f.read(self.CHUNK_SIZE)
+                if not chunk:
+                    break
+
+                chunk_end = uploaded + len(chunk) - 1
+                headers = {
+                    **self._auth_header(),
+                    'Content-Type': mime,
+                    'Content-Range': f'bytes {uploaded}-{chunk_end}/{file_size}',
+                }
+
+                resp = requests.put(
+                    session_uri,
+                    headers=headers,
+                    data=chunk,
+                    timeout=300,
+                )
+
+                # 200/201 → final chunk accepted; 308 → more chunks expected
+                if resp.status_code in (200, 201):
+                    uploaded = file_size
+                elif resp.status_code == 308:
+                    range_header = resp.headers.get('Range')
+                    if range_header:
+                        uploaded = int(range_header.split('-')[1]) + 1
+                    else:
+                        uploaded += len(chunk)
+                else:
+                    print(f"[GDrive] Unexpected status during upload chunk: "
+                          f"{resp.status_code} {resp.text[:200]}")
+                    return False
+
+                progress.uploaded_bytes = uploaded
+                if progress_callback:
+                    progress_callback(progress)
+
+                pct = uploaded / file_size * 100
+                speed_mb = progress.upload_speed / (1024 * 1024)
+                print(f"[GDrive] Progress: {pct:.1f}%  ({speed_mb:.1f} MB/s)")
+
+        return uploaded >= file_size

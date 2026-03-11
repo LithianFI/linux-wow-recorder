@@ -22,11 +22,21 @@ if not exist "venv" (
 REM Activate virtual environment
 call venv\Scripts\activate.bat
 
-REM Install requirements if needed
-if not exist "venv\.requirements_installed" (
-    echo Installing requirements...
+REM Install/update requirements if requirements.txt has changed
+set REQ_HASH_FILE=venv\.requirements_hash
+
+REM Get current hash of requirements.txt using certutil
+for /f "skip=1 tokens=* delims=" %%A in ('certutil -hashfile requirements.txt MD5 2^>nul') do (
+    if not defined CURRENT_HASH set CURRENT_HASH=%%A
+)
+
+set STORED_HASH=
+if exist "%REQ_HASH_FILE%" set /p STORED_HASH=<"%REQ_HASH_FILE%"
+
+if not "%CURRENT_HASH%"=="%STORED_HASH%" (
+    echo Installing/updating requirements...
     pip install -r requirements.txt
-    echo. > venv\.requirements_installed
+    echo %CURRENT_HASH%> "%REQ_HASH_FILE%"
 )
 
 echo.

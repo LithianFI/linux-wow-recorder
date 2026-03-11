@@ -15,13 +15,10 @@ open_browser() {
     
     # Try to open browser based on OS
     if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-        # Linux
         xdg-open http://localhost:5001 &>/dev/null &
     elif [[ "$OSTYPE" == "darwin"* ]]; then
-        # macOS
         open http://localhost:5001 &>/dev/null &
     elif [[ "$OSTYPE" == "cygwin" ]] || [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "win32" ]]; then
-        # Windows (Git Bash, Cygwin, MSYS)
         start http://localhost:5001 &>/dev/null &
     else
         echo "Note: Please open http://localhost:5001 in your browser"
@@ -41,11 +38,15 @@ fi
 # Activate virtual environment
 source venv/bin/activate
 
-# Install requirements if needed
-if [ ! -f "venv/.requirements_installed" ]; then
-    echo "Installing requirements..."
+# Install/update requirements if requirements.txt has changed
+REQ_HASH_FILE="venv/.requirements_hash"
+CURRENT_HASH=$(md5sum requirements.txt 2>/dev/null || md5 -q requirements.txt 2>/dev/null)
+STORED_HASH=$(cat "$REQ_HASH_FILE" 2>/dev/null)
+
+if [ "$CURRENT_HASH" != "$STORED_HASH" ]; then
+    echo "Installing/updating requirements..."
     pip install -r requirements.txt
-    touch venv/.requirements_installed
+    echo "$CURRENT_HASH" > "$REQ_HASH_FILE"
 fi
 
 echo ""
