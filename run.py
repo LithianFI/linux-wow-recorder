@@ -25,6 +25,7 @@ from combat_parser.parser import CombatParser
 from log_watcher import LogMonitor
 from typing import Optional
 
+
 from constants import (
     DEFAULT_WEB_HOST,
     DEFAULT_WEB_PORT,
@@ -291,16 +292,28 @@ def queue_cloud_upload(filename: str):
             return jsonify({'error': 'Invalid path'}), 403
         if not file_path.exists():
             return jsonify({'error': 'File not found'}), 404
+
+        # Parse what we can from the filename; fall back gracefully if the
+        # name doesn't match the expected pattern.
         stem = file_path.stem
         parts = stem.split('_')
-        boss_name = parts[2] if len(parts) >= 4 else None
+        boss_name = parts[2] if len(parts) >= 4 else stem
         difficulty = parts[3] if len(parts) >= 4 else None
-        success = s.cloud_manager.queue_upload(
-            file_path=file_path,
-            boss_name=boss_name,
-            difficulty=difficulty,
+
+        from cloud_upload import VideoMetadata
+        metadata = VideoMetadata(
+            video_name=stem,
+            video_key=file_path.name,
+            file_path=str(file_path),
+            file_size=file_path.stat().st_size,
+            start=int(time.time() * 1000),
+            unique_hash='',
             category='manual',
+            encounter_name=boss_name,
+            difficulty=difficulty,
         )
+
+        success = s.cloud_manager.queue_upload(file_path=file_path, metadata=metadata)
         if success:
             return jsonify({'success': True, 'message': f'Queued {filename} for upload'})
         return jsonify({'success': False, 'error': 'Failed to queue upload'}), 500
@@ -562,7 +575,7 @@ def status_broadcast_loop():
             if status_key != last_status:
                 socketio.emit('status', status)
                 last_status = status_key
-            elif status['recorder'].get('recording'):
+            elif recorder.get('recording'):
                 socketio.emit('status', status)
 
             current_time = time.time()

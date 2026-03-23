@@ -12,7 +12,6 @@ from obs_client import OBSClient
 from state_manager import RecordingState
 from config_manager import ConfigManager
 
-from combat_parser.events import CombatEvent, BossInfo, DungeonInfo
 from combat_parser.file_manager import RecordingFileManager
 from combat_parser.recording_processor import RecordingProcessor
 from combat_parser.dungeon_monitor import DungeonMonitor
