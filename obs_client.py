@@ -203,7 +203,7 @@ class OBSClient:
                 output_response = self.client.get_output_settings()
                 if hasattr(output_response, 'output_settings'):
                     settings.update(output_response.output_settings)
-            except:
+            except Exception:
                 pass  # Output settings might not be available
             
             return settings

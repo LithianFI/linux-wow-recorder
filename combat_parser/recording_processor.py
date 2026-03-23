@@ -8,8 +8,6 @@ from pathlib import Path
 from datetime import datetime
 
 from constants import (
-    DEFAULT_RENAME_DELAY,
-    DEFAULT_MIN_RECORDING_DURATION,
     LOG_PREFIXES,
 )
 
@@ -72,7 +70,7 @@ class RecordingProcessor:
             print(f"{LOG_PREFIXES['PROC']} Failed to stop OBS recording")
             return False
 
-        wait_time = self.config.RENAME_DELAY if hasattr(self.config, 'RENAME_DELAY') else DEFAULT_RENAME_DELAY
+        wait_time = self.config.RENAME_DELAY
         time.sleep(wait_time)
 
         return self._process_recording_file(
@@ -111,7 +109,7 @@ class RecordingProcessor:
                                start_time: Optional[datetime] = None) -> bool:
         """Process the recording file (rename or delete)."""
         # Check minimum duration
-        min_duration = self.config.MIN_RECORDING_DURATION if hasattr(self.config, 'MIN_RECORDING_DURATION') else DEFAULT_MIN_RECORDING_DURATION
+        min_duration = self.config.MIN_RECORDING_DURATION
         if recording_duration < min_duration:
             print(f"{LOG_PREFIXES['PROC']} Recording too short ({recording_duration:.1f}s), will delete")
             return self._handle_short_recording(recording_duration)
@@ -132,7 +130,7 @@ class RecordingProcessor:
             start_time = datetime.fromtimestamp(recording_path.stat().st_mtime)
         
         # Rename the file based on naming scheme
-        naming_scheme = self.config.FILE_NAMING_SCHEME if hasattr(self.config, 'FILE_NAMING_SCHEME') else 'simple'
+        naming_scheme = self.config.FILE_NAMING_SCHEME
         
         if naming_scheme == 'wcr' and metadata:
             # Use WCR-style naming
@@ -151,7 +149,7 @@ class RecordingProcessor:
             self._save_metadata_json(new_path, metadata)
         
         # ── Move into date subfolder ──────────────────────────────
-        if new_path and getattr(self.config, 'ORGANIZE_BY_DATE', False):
+        if new_path and self.config.ORGANIZE_BY_DATE:
             organised = self.file_manager.organize_into_date_subfolder(new_path)
             if organised:
                 new_path = organised

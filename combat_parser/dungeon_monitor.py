@@ -7,7 +7,6 @@ import threading
 from typing import Optional, Callable
 
 from constants import (
-    DEFAULT_DUNGEON_TIMEOUT,
     LOG_PREFIXES,
 )
 
@@ -49,7 +48,7 @@ class DungeonMonitor:
         while self._running:
             try:
                 if self.state.dungeon_active:
-                    timeout = self.config.DUNGEON_TIMEOUT_SECONDS if hasattr(self.config, 'DUNGEON_TIMEOUT_SECONDS') else DEFAULT_DUNGEON_TIMEOUT
+                    timeout = self.config.DUNGEON_TIMEOUT_SECONDS
                     if self.state.is_dungeon_idle(timeout):
                         print(f"{LOG_PREFIXES['DUNGEON']} Dungeon idle for {timeout}s, triggering timeout")
                         if self.on_timeout:
