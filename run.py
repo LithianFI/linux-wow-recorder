@@ -575,8 +575,6 @@ def status_broadcast_loop():
             if status_key != last_status:
                 socketio.emit('status', status)
                 last_status = status_key
-            elif recorder.get('recording'):
-                socketio.emit('status', status)
 
             current_time = time.time()
             if current_time - last_cloud_broadcast >= 5:

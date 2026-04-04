@@ -94,7 +94,7 @@ class RecordingProcessor:
             print(f"{LOG_PREFIXES['PROC']} Failed to stop OBS recording")
             return False
 
-        wait_time = self.config.RENAME_DELAY if hasattr(self.config, 'RENAME_DELAY') else DEFAULT_RENAME_DELAY
+        wait_time = self.config.RENAME_DELAY
         time.sleep(wait_time)
 
         return self._process_recording_file(

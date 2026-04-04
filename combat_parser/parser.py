@@ -20,6 +20,15 @@ from metadata_generator import RecordingMetadata, RecordingCategory, DeathParser
 
 from constants import LOG_PREFIXES
 
+_RELEVANT_EVENTS = frozenset((
+    "ENCOUNTER_START", "ENCOUNTER_END",
+    "CHALLENGE_MODE_START", "CHALLENGE_MODE_END",
+    "ZONE_CHANGE", "COMBATANT_INFO", "UNIT_DIED",
+))
+
+
+_LOCAL_PLAYER_FLAGS = frozenset({'0x511', '0x10511'})
+
 
 class CombatParser:
     """Main parser that coordinates combat log parsing and recording actions."""
@@ -59,6 +68,9 @@ class CombatParser:
         self.encounter_start_log_timestamp: Optional[str] = None
         self.encounter_end_log_timestamp: Optional[str] = None
 
+        # Throttle update_activity() calls — no need to call time.time() on every line
+        self._last_activity_update: float = 0.0
+
         # Start dungeon monitor
         self.dungeon_monitor.start()
 
@@ -69,14 +81,21 @@ class CombatParser:
         if not (self.player_guid and self.player_name):
             self._try_identify_player(line)
 
+        # Throttled activity update — dungeon monitor only checks every 5 s.
+        if self.state.dungeon_active:
+            now = time.time()
+            if now - self._last_activity_update >= 1.0:
+                self.state.update_activity()
+                self._last_activity_update = now
+
+        # Fast pre-filter: skip CSV parse for lines with no actionable tokens.
+        if not any(tok in line for tok in _RELEVANT_EVENTS):
+            return
+
         # Parse the line
         event = CombatEvent(line)
         if not event.is_valid():
             return
-
-        # Update activity timestamp for dungeon idle detection
-        if self.state.dungeon_active:
-            self.state.update_activity()
 
         # Handle the event - prioritize dungeons over encounters
         if event.is_dungeon_start:
@@ -89,6 +108,20 @@ class CombatParser:
             self._handle_encounter_start(event)
         elif event.is_encounter_end:
             self._handle_encounter_end(event)
+
+        # Track deaths — guard with string check before the heavier parse call.
+        # DeathParser.parse_death_line() does its own "UNIT_DIED" check internally,
+        # but calling the function at all (frame creation, argument passing) on every
+        # line during a pull is measurable overhead.
+        if self.config.TRACK_PLAYER_DEATHS and (self.state.encounter_active or self.state.dungeon_active):
+            if "UNIT_DIED" in line:       
+                death_info = DeathParser.parse_death_line(line)
+                if death_info:
+                    self.encounter_deaths.append({
+                        'timestamp': death_info['timestamp'],
+                        'name': death_info['name'],
+                    })
+                    print(f"{LOG_PREFIXES['PARSER']} 💀 Player death: {death_info['name']}")
 
         # Grab specID from COMBATANT_INFO once we know the player GUID
         if self.player_guid and self.player_spec_id is None and 'COMBATANT_INFO' in line:
@@ -191,7 +224,6 @@ class CombatParser:
             # parts[0] = eventType
             # parts[1] = srcGUID   parts[2] = srcName   parts[3] = srcFlags
             # parts[5] = dstGUID   parts[6] = dstName   parts[7] = dstFlags
-            LOCAL_PLAYER_FLAGS = {'0x511', '0x10511'}  # seen in retail logs
 
             for guid_idx, name_idx, flags_idx in ((1, 2, 3), (5, 6, 7)):
                 guid = parts[guid_idx].strip()
@@ -199,7 +231,7 @@ class CombatParser:
 
                 if not guid.startswith('Player-'):
                     continue
-                if flags not in LOCAL_PLAYER_FLAGS:
+                if flags not in _LOCAL_PLAYER_FLAGS:
                     continue
 
                 raw_name = parts[name_idx].strip().strip('"')
@@ -307,56 +339,36 @@ class CombatParser:
 
         print(f"{LOG_PREFIXES['PARSER']} Started M+ dungeon: {dungeon_info.name} (+{dungeon_info.dungeon_level})")
 
-    def _handle_dungeon_end(self, event: Optional[CombatEvent], reason: str = "dungeon_complete"):
-        """Handle CHALLENGE_MODE_END event.
-
-        ``event`` may be None when called from a timeout or other synthetic
-        trigger; in that case success is always False and the current wall-clock
-        time is used as the timestamp.
-        """
+    def _handle_dungeon_end(self, event: CombatEvent, reason: str = "dungeon_complete"):
+        """Handle CHALLENGE_MODE_END event."""
         if not self.state.dungeon_active:
             return
-        
-        if self.state.manual_recording: 
-            return
-
+ 
         dungeon_name = self.state.dungeon_name
         dungeon_level = self.state.dungeon_level
         dungeon_duration = self.state.get_encounter_duration()
-
-        # A real CHALLENGE_MODE_END carries the success flag; synthetic calls never succeed.
-        is_success = event.get_dungeon_end_info()[0] if event else False
-        timestamp = event.timestamp if event else datetime.now().strftime("%m/%d/%Y %H:%M:%S.0000")
-
+        is_success, _ = event.get_dungeon_end_info()
+ 
         dungeon_info = DungeonInfo(
             dungeon_id=self.state.dungeon_id or 0,
             name=dungeon_name or "Unknown Dungeon",
             dungeon_level=dungeon_level or 0,
-            timestamp=timestamp
+            timestamp=event.timestamp
         )
-
-        # Scan log file for deaths in the dungeon window
-        self.encounter_end_log_timestamp = event.timestamp
-        if self.config.TRACK_PLAYER_DEATHS:
-            self._scan_log_for_encounter_data()
-
+ 
         self._finalize_metadata(is_kill=is_success, duration=dungeon_duration)
-
-        self._emit_event('DUNGEON_END', timestamp, {
+ 
+        self._emit_event('DUNGEON_END', event.timestamp, {
             'dungeon_name': dungeon_name,
             'dungeon_level': dungeon_level,
             'duration': round(dungeon_duration, 1),
             'is_success': is_success,
             'reason': reason,
         })
-
-        # Wait a moment before processing
-        time.sleep(3)
-
+ 
         self._start_thread(self._process_dungeon_end_thread, dungeon_info, dungeon_duration, reason)
-
         self.state.reset()
-
+ 
         print(f"{LOG_PREFIXES['PARSER']} Ended M+ dungeon: {dungeon_info.name} ({reason})")
 
     def _handle_zone_change(self, event: CombatEvent):
@@ -434,21 +446,14 @@ class CombatParser:
 
     def _handle_encounter_end(self, event: CombatEvent):
         """Handle ENCOUNTER_END event."""
-        # Only process if we're in an active encounter
-        if self.state.manual_recording:  
-            return
         if not self.state.encounter_active:
             return
-
-        # Get boss info and recording duration
+ 
         boss_name = self.state.boss_name
         difficulty_id = self.state.difficulty_id
         encounter_duration = self.state.get_encounter_duration()
-
-        # Check kill/wipe status from event fields
         is_kill, _ = event.get_encounter_end_info()
-
-        # Create boss info for processing
+ 
         boss_info = BossInfo(
             boss_id=self.state.boss_id or 0,
             name=boss_name or "Unknown",
@@ -456,32 +461,19 @@ class CombatParser:
             instance_id=self.state.instance_id or 0,
             timestamp=event.timestamp
         )
-
-        # Scan log file for deaths in the encounter window
-        self.encounter_end_log_timestamp = event.timestamp
-        if self.config.TRACK_PLAYER_DEATHS:
-            self._scan_log_for_encounter_data()
-
-        # Update metadata with result
+ 
         self._finalize_metadata(is_kill=is_kill, duration=encounter_duration)
-
-        # Emit event for frontend
+ 
         self._emit_event('ENCOUNTER_END', event.timestamp, {
             'boss_name': boss_name,
             'difficulty_id': difficulty_id,
             'duration': round(encounter_duration, 1),
             'is_kill': is_kill,
         })
-
-        # Wait for encounter to fully end
-        time.sleep(3)
-
-        # Process encounter end in background thread
+ 
         self._start_thread(self._process_encounter_end_thread, boss_info, encounter_duration)
-
-        # Reset state
         self.state.reset()
-
+ 
         print(f"{LOG_PREFIXES['PARSER']} Ended encounter: {boss_info.name}")
 
     def _init_metadata_for_encounter(self, boss_info: BossInfo):
@@ -554,7 +546,11 @@ class CombatParser:
         # Deaths already added to current_metadata by _scan_log_for_deaths()
         # which is called before _finalize_metadata on encounter/dungeon end.
 
-    def _scan_log_for_encounter_data(self):
+    def _scan_log_for_encounter_data(
+            self, 
+            start_ts: Optional[str] = None,
+            end_ts: Optional[str] = None,
+            ):
         """Scan the current log file between encounter start and end timestamps
         to collect UNIT_DIED events (deaths) and COMBATANT_INFO lines (raid members).
 
@@ -582,8 +578,8 @@ class CombatParser:
             print(f"{LOG_PREFIXES['PARSER']} Log file not available for encounter data scan")
             return
 
-        start_ts = self.encounter_start_log_timestamp
-        end_ts = self.encounter_end_log_timestamp
+        start_ts = start_ts or self.encounter_start_log_timestamp
+        end_ts = end_ts or self.encounter_end_log_timestamp
 
         if not start_ts or not end_ts:
             print(f"{LOG_PREFIXES['PARSER']} Missing encounter timestamps for data scan")
@@ -649,28 +645,15 @@ class CombatParser:
             except Exception:
                 continue
 
-        # Build GUID->specID map from COMBATANT_INFO lines (needed for death specId)
         guid_to_spec: dict = {}
         for line in window_lines:
-            if 'COMBATANT_INFO' not in line:
+            is_combatant = 'COMBATANT_INFO' in line
+            is_death = 'UNIT_DIED' in line
+ 
+            if not is_combatant and not is_death:
                 continue
-            try:
-                ts_split = line.split('  ', 1)
-                if len(ts_split) < 2:
-                    continue
-                parts = ts_split[1].split(',', 25)
-                if len(parts) < 24:
-                    continue
-                guid = parts[1].strip()
-                spec_id = int(parts[23].strip())
-                if guid.startswith('Player-') and spec_id > 0:
-                    guid_to_spec[guid] = spec_id
-            except (ValueError, IndexError):
-                continue
-
-        # Second pass: process deaths and COMBATANT_INFO lines
-        for line in window_lines:
-            if 'UNIT_DIED' in line and self.config.TRACK_PLAYER_DEATHS:
+ 
+            if is_death and self.config.TRACK_PLAYER_DEATHS:
                 death_info = DeathParser.parse_death_line(line)
                 if death_info:
                     spec_id = guid_to_spec.get(death_info['guid'], 0)
@@ -681,37 +664,38 @@ class CombatParser:
                     )
                     deaths_found += 1
                     print(f"{LOG_PREFIXES['PARSER']} 💀 Death: {death_info['name']}")
-
-            if 'COMBATANT_INFO' in line:
+ 
+            if is_combatant:
                 try:
                     ts_split = line.split('  ', 1)
                     if len(ts_split) < 2:
                         continue
-                    # Split only as far as we need (up to specID at index 23)
                     parts = ts_split[1].split(',', 25)
                     if len(parts) < 24:
                         continue
-
+ 
                     guid = parts[1].strip()
                     if not guid.startswith('Player-'):
                         continue
-
+ 
                     faction = int(parts[2].strip())
                     spec_id = int(parts[23].strip())
-
-                    # Skip if we can't identify this player
+ 
+                    # Always update guid_to_spec so any death lines later in this
+                    # same pass can look up the spec_id for this player.
+                    if spec_id > 0:
+                        guid_to_spec[guid] = spec_id
+ 
                     if guid not in guid_to_name:
                         continue
-
+ 
                     name, realm = guid_to_name[guid]
-
-                    # Update local player's specID if we haven't got it yet
+ 
                     if guid == self.player_guid and self.player_spec_id is None and spec_id > 0:
                         self.player_spec_id = spec_id
                         if self.current_metadata.player_info:
                             self.current_metadata.player_info["_specID"] = spec_id
-
-                    # Add as combatant (add_combatant deduplicates internally)
+ 
                     self.current_metadata.add_combatant(
                         guid=guid,
                         name=name,
@@ -720,10 +704,10 @@ class CombatParser:
                         team_id=faction,
                     )
                     combatants_found += 1
-
+ 
                 except (ValueError, IndexError):
                     continue
-
+ 
         print(f"{LOG_PREFIXES['PARSER']} Scan complete: {deaths_found} deaths, {combatants_found} combatants found")
 
     def _parse_timestamp_to_ms(self, timestamp: str) -> int:
@@ -754,6 +738,8 @@ class CombatParser:
 
     def _process_dungeon_end_thread(self, dungeon_info: DungeonInfo, duration: float, reason: str):
         """Thread function for ending dungeon recording."""
+        time.sleep(3)   # moved from handler — no longer blocks log tailer
+ 
         result = self.processor.process_dungeon_end(
             dungeon_info,
             duration,
@@ -761,12 +747,12 @@ class CombatParser:
             metadata=self.current_metadata if (self.config.GENERATE_METADATA_JSON or self.config.FILE_NAMING_SCHEME == 'wcr') else None,
             start_time=self.encounter_start_time
         )
-
+ 
         if result and self.on_recording_saved:
             self.on_recording_saved({
                 'duration': duration,
                 'boss_name': f"{dungeon_info.name} +{dungeon_info.dungeon_level}",
-                'difficulty_id': 8,  # Mythic+ internal difficulty ID
+                'difficulty_id': 4,
                 'is_kill': reason == 'dungeon_complete',
                 'category': 'dungeon',
             })
@@ -779,13 +765,15 @@ class CombatParser:
 
     def _process_encounter_end_thread(self, boss_info: BossInfo, duration: float):
         """Thread function for ending encounter recording."""
+        time.sleep(3)   # moved from handler — no longer blocks log tailer
+ 
         result = self.processor.process_encounter_end(
             boss_info,
             duration,
             metadata=self.current_metadata if (self.config.GENERATE_METADATA_JSON or self.config.FILE_NAMING_SCHEME == 'wcr') else None,
             start_time=self.encounter_start_time
         )
-
+ 
         if result and self.on_recording_saved:
             self.on_recording_saved({
                 'duration': duration,
@@ -797,6 +785,7 @@ class CombatParser:
 
     def _start_thread(self, target: Callable, *args):
         """Helper to start a background thread."""
+        self._cleanup_completed_threads()  # prune dead entries before adding new one
         thread = threading.Thread(
             target=target,
             args=args,
