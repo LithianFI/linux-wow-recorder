@@ -58,6 +58,7 @@ class CombatParser:
 
         # Metadata tracking
         self.current_metadata = RecordingMetadata()
+        self.encounter_deaths = [] 
         self.player_guid = None
         self.player_name = None
         self.player_realm = None
@@ -339,7 +340,7 @@ class CombatParser:
 
         print(f"{LOG_PREFIXES['PARSER']} Started M+ dungeon: {dungeon_info.name} (+{dungeon_info.dungeon_level})")
 
-    def _handle_dungeon_end(self, event: CombatEvent, reason: str = "dungeon_complete"):
+    def _handle_dungeon_end(self, event, reason: str = "dungeon_complete"):
         """Handle CHALLENGE_MODE_END event."""
         if not self.state.dungeon_active:
             return
@@ -347,18 +348,25 @@ class CombatParser:
         dungeon_name = self.state.dungeon_name
         dungeon_level = self.state.dungeon_level
         dungeon_duration = self.state.get_encounter_duration()
-        is_success, _ = event.get_dungeon_end_info()
+ 
+        # event is None when called from a timeout — guard every access
+        is_success = (
+            reason == 'dungeon_complete'
+            and event is not None
+            and event.get_dungeon_end_info()[0]
+        )
+        timestamp = event.timestamp if event else datetime.now().strftime("%m/%d/%Y %H:%M:%S.0000")
  
         dungeon_info = DungeonInfo(
             dungeon_id=self.state.dungeon_id or 0,
             name=dungeon_name or "Unknown Dungeon",
             dungeon_level=dungeon_level or 0,
-            timestamp=event.timestamp
+            timestamp=timestamp
         )
  
         self._finalize_metadata(is_kill=is_success, duration=dungeon_duration)
  
-        self._emit_event('DUNGEON_END', event.timestamp, {
+        self._emit_event('DUNGEON_END', timestamp, {
             'dungeon_name': dungeon_name,
             'dungeon_level': dungeon_level,
             'duration': round(dungeon_duration, 1),
