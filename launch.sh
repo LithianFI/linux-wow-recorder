@@ -8,11 +8,22 @@
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 cd "$SCRIPT_DIR"
 
+# Parse --no-browser flag (consume it here; don't pass it to python)
+OPEN_BROWSER=true
+PYTHON_ARGS=()
+for arg in "$@"; do
+    if [ "$arg" = "--no-browser" ]; then
+        OPEN_BROWSER=false
+    else
+        PYTHON_ARGS+=("$arg")
+    fi
+done
+
 # Function to open browser
 open_browser() {
     # Wait 2 seconds for server to start
     sleep 2
-    
+
     # Try to open browser based on OS
     if [[ "$OSTYPE" == "linux-gnu"* ]]; then
         xdg-open http://localhost:5001 &>/dev/null &
@@ -55,9 +66,12 @@ echo "Web interface: http://localhost:5001"
 echo "Press Ctrl+C to stop the application"
 echo ""
 
-# Open browser automatically
-echo "Opening browser..."
-open_browser &
+if [ "$OPEN_BROWSER" = true ]; then
+    echo "Opening browser... (use --no-browser to skip)"
+    open_browser &
+else
+    echo "Browser auto-open skipped (--no-browser)"
+fi
 
-# Run the application
-python run.py "$@"
+# Run the application (remaining args forwarded to python)
+python run.py "${PYTHON_ARGS[@]}"

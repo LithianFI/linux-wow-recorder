@@ -14,38 +14,18 @@
         }
 
         @keyframes pulse-recording {
-
-            0%,
-            100% {
-                opacity: 1;
-            }
-
-            50% {
-                opacity: 0.5;
-            }
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
         }
 
         .animate-pulse-recording {
             animation: pulse-recording 1s ease-in-out infinite;
         }
 
-        .custom-scrollbar::-webkit-scrollbar {
-            width: 6px;
-        }
-
-        .custom-scrollbar::-webkit-scrollbar-track {
-            background: rgb(55 65 81);
-            border-radius: 3px;
-        }
-
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-            background: rgb(107 114 128);
-            border-radius: 3px;
-        }
-
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-            background: rgb(156 163 175);
-        }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: rgb(55 65 81); border-radius: 3px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgb(107 114 128); border-radius: 3px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgb(156 163 175); }
     </style>
 </head>
 
@@ -67,20 +47,50 @@
             </a>
         </header>
 
-        <div class="mb-6 flex items-center gap-4 text-sm">
-            <div class="flex items-center gap-2" x-show="status.obs_connected !== undefined">
-                <span class="w-2 h-2 rounded-full"
-                    :class="status.obs_connected ? 'bg-green-500' : 'bg-yellow-500'"></span>
-                <span class="text-gray-400" x-text="status.obs_connected ? 'OBS Connected' : 'OBS Disconnected'"></span>
+        <!-- Status bar -->
+        <div class="mb-6 flex items-center gap-4 text-sm flex-wrap">
+            <!-- Server connection -->
+            <div class="flex items-center gap-2" x-show="connected">
+                <span class="w-2 h-2 rounded-full bg-green-500"></span>
+                <span class="text-gray-400">Server Connected</span>
             </div>
             <div class="flex items-center gap-2" x-show="!connected">
                 <span class="w-2 h-2 rounded-full bg-red-500"></span>
                 <span class="text-red-400">Server Disconnected</span>
             </div>
+
+            <!-- OBS connection with reconnect button -->
+            <div class="flex items-center gap-2" x-show="status.obs_connected !== undefined">
+                <span class="w-2 h-2 rounded-full"
+                    :class="status.obs_connected ? 'bg-green-500' : 'bg-yellow-500'"></span>
+                <span class="text-gray-400" x-text="status.obs_connected ? 'OBS Connected' : 'OBS Disconnected'"></span>
+                <button x-show="!status.obs_connected" x-cloak
+                    @click="reconnectOBS()"
+                    :disabled="obsReconnecting"
+                    class="text-xs px-2 py-0.5 rounded bg-yellow-600/20 text-yellow-400 border border-yellow-600/40 hover:bg-yellow-600/30 transition-colors disabled:opacity-50">
+                    <span x-text="obsReconnecting ? 'Connecting…' : 'Reconnect'"></span>
+                </button>
+            </div>
         </div>
 
+        <!-- Recorder not running warning -->
+        <div x-show="status.recorder_running === false && connected" x-cloak
+            class="mb-6 flex items-start gap-3 p-4 bg-red-900/30 border border-red-700/50 rounded-lg">
+            <svg class="w-5 h-5 text-red-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <div>
+                <p class="text-red-400 font-medium">Recorder not running</p>
+                <p class="text-red-300/70 text-sm mt-0.5">The recorder failed to initialise — check that your log directory exists and OBS is reachable. See the terminal for details.</p>
+            </div>
+        </div>
+
+        <!-- Recording status card -->
         <section class="bg-gray-800 rounded-lg p-4 mb-6">
-            <div x-show="!status.recorder?.recording && !status.recorder?.encounter_active"
+
+            <!-- Idle -->
+            <div x-show="!status.recorder?.recording && !status.recorder?.encounter_active && !status.recorder?.dungeon_active"
                 class="flex items-center gap-4">
                 <div class="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center shrink-0">
                     <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -96,9 +106,10 @@
                 </div>
             </div>
 
-            <div x-show="status.recorder?.recording" x-cloak class="flex items-center gap-4">
-                <div
-                    class="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center shrink-0 animate-pulse-recording">
+            <!-- Active boss recording -->
+            <div x-show="status.recorder?.recording && !status.recorder?.dungeon_active" x-cloak
+                class="flex items-center gap-4">
+                <div class="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center shrink-0 animate-pulse-recording">
                     <div class="w-6 h-6 rounded-full bg-red-500 flex items-center justify-center">
                         <div class="w-2 h-2 rounded-full bg-white"></div>
                     </div>
@@ -106,20 +117,37 @@
                 <div class="flex-1 min-w-0">
                     <div class="flex items-center gap-3">
                         <span class="text-red-400 font-bold">REC</span>
-                        <span class="text-xl font-mono text-white"
-                            x-text="formatDuration(status.recorder?.recording_duration || 0)"></span>
+                        <span class="text-xl font-mono text-white" x-text="formatDuration(liveRecordingDuration)"></span>
                     </div>
                     <p class="text-sm truncate">
                         <span class="text-amber-400" x-text="status.recorder?.boss_name || 'Unknown Boss'"></span>
                         <span class="text-gray-500 mx-1">•</span>
                         <span class="text-gray-400" x-text="getDifficultyName(status.recorder?.difficulty_id)"></span>
+                        <template x-if="status.recorder?.manual_recording">
+                            <span class="ml-2 text-xs px-1.5 py-0.5 rounded bg-gray-700 text-gray-400">manual</span>
+                        </template>
                     </p>
                 </div>
             </div>
 
+            <!-- Encounter active but not yet recording (difficulty filtered or OBS delay) -->
+            <div x-show="status.recorder?.encounter_active && !status.recorder?.recording && !status.recorder?.dungeon_active" x-cloak
+                class="flex items-center gap-4">
+                <div class="w-10 h-10 rounded-full bg-yellow-500/20 flex items-center justify-center shrink-0">
+                    <svg class="w-5 h-5 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                </div>
+                <div>
+                    <p class="text-yellow-400">Encounter in progress <span class="text-gray-500">(not recording)</span></p>
+                    <p class="text-sm text-amber-400" x-text="status.recorder?.boss_name"></p>
+                </div>
+            </div>
+
+            <!-- M+ dungeon active -->
             <div x-show="status.recorder?.dungeon_active" x-cloak class="flex items-center gap-4">
-                <div
-                    class="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center shrink-0 animate-pulse-recording">
+                <div class="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center shrink-0 animate-pulse-recording">
                     <div class="w-6 h-6 rounded-full bg-purple-500 flex items-center justify-center">
                         <svg class="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
                             <path fill-rule="evenodd"
@@ -131,52 +159,35 @@
                 <div class="flex-1 min-w-0">
                     <div class="flex items-center gap-3">
                         <span class="text-purple-400 font-bold">M+</span>
-                        <span class="text-xl font-mono text-white"
-                            x-text="formatDuration(status.recorder?.encounter_duration || 0)"></span>
+                        <span class="text-xl font-mono text-white" x-text="formatDuration(liveRecordingDuration)"></span>
                     </div>
                     <p class="text-sm truncate">
-                        <span class="text-purple-300"
-                            x-text="status.recorder?.dungeon_name || 'Unknown Dungeon'"></span>
+                        <span class="text-purple-300" x-text="status.recorder?.dungeon_name || 'Unknown Dungeon'"></span>
                         <span class="text-gray-500 mx-1">•</span>
-                        <span class="text-amber-400">+<span
-                                x-text="status.recorder?.dungeon_level || '?'"></span></span>
+                        <span class="text-amber-400">+<span x-text="status.recorder?.dungeon_level || '?'"></span></span>
+                        <template x-if="status.recorder?.recording">
+                            <span class="ml-2 text-xs text-red-400">● recording</span>
+                        </template>
                     </p>
                 </div>
             </div>
 
-            <div x-show="status.recorder?.encounter_active && !status.recorder?.recording" x-cloak
-                class="flex items-center gap-4">
-                <div class="w-10 h-10 rounded-full bg-yellow-500/20 flex items-center justify-center shrink-0">
-                    <svg class="w-5 h-5 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z">
-                        </path>
-                    </svg>
-                </div>
-                <div>
-                    <p class="text-yellow-400">Encounter in progress <span class="text-gray-500">(not recording)</span>
-                    </p>
-                    <p class="text-sm text-amber-400" x-text="status.recorder?.boss_name"></p>
-                </div>
-            </div>
-            <!-- Manual Record / Stop Recording Button -->
+            <!-- Manual record / stop button -->
             <div class="mt-4 pt-4 border-t border-gray-700">
-                <!-- Show "Start Manual Recording" when nothing is active -->
-                <button x-show="!status.recorder?.recording" @click="manualRecordingAction()" class="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium
-               transition-colors bg-gray-700 hover:bg-red-600 text-gray-300 hover:text-white">
+                <button x-show="!status.recorder?.recording" @click="manualRecordingAction()"
+                    class="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-gray-700 hover:bg-red-600 text-gray-300 hover:text-white">
                     <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                         <circle cx="10" cy="10" r="6" />
                     </svg>
                     Start Manual Recording
                 </button>
 
-                <!-- Show "Stop Recording" when any recording is active -->
                 <button x-show="status.recorder?.recording" x-cloak @click="manualRecordingAction()"
-                    :disabled="!status.recorder?.manual_recording" :title="!status.recorder?.manual_recording
-            ? 'Recording is managed automatically'
-            : 'Stop the active recording'" :class="status.recorder?.manual_recording
-            ? 'bg-red-600 hover:bg-red-700 text-white cursor-pointer'
-            : 'bg-gray-700 text-gray-500 cursor-not-allowed opacity-60'"
+                    :disabled="!status.recorder?.manual_recording"
+                    :title="!status.recorder?.manual_recording ? 'Recording is managed automatically' : 'Stop the active recording'"
+                    :class="status.recorder?.manual_recording
+                        ? 'bg-red-600 hover:bg-red-700 text-white cursor-pointer'
+                        : 'bg-gray-700 text-gray-500 cursor-not-allowed opacity-60'"
                     class="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
                     <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                         <rect x="5" y="5" width="10" height="10" rx="1" />
@@ -186,6 +197,7 @@
             </div>
         </section>
 
+        <!-- Combat Log status -->
         <section class="bg-gray-800 rounded-lg p-6">
             <h2 class="text-lg font-semibold text-gray-300 mb-4 flex items-center gap-2">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -209,42 +221,95 @@
                 <div class="flex items-center justify-between">
                     <span class="text-gray-400">Current Log</span>
                     <span class="font-mono text-sm truncate max-w-xs"
-                        :class="status.log_monitor?.current_log ? 'text-amber-400' : 'text-gray-500'"
+                        :class="status.log_monitor?.current_log ? 'text-gray-300' : 'text-gray-500'"
                         x-text="status.log_monitor?.current_log || 'None'"></span>
                 </div>
 
-                <div class="pt-4 border-t border-gray-700">
-                    <h3 class="text-sm font-medium text-gray-400 mb-3">Event Feed</h3>
-                    <div class="max-h-72 overflow-y-auto custom-scrollbar">
-                        <template x-if="events.length === 0">
-                            <p class="text-gray-500 text-sm text-center py-4">No events yet</p>
-                        </template>
-                        <template x-if="events.length > 0">
-                            <table class="w-full text-sm font-mono">
-                                <template x-for="event in events.slice().reverse()"
-                                    :key="event.timestamp + event.boss_name">
-                                    <tr class="border-b border-gray-700/50 hover:bg-gray-700/30">
-                                        <td class="py-2 pr-4 w-16">
-                                            <span class="font-semibold"
-                                                :class="event.type === 'ENCOUNTER_START' || event.type === 'MANUAL_RECORDING_START' ? 'text-blue-400' : (event.type === 'MANUAL_RECORDING_STOP' ? 'text-amber-400' : (event.is_kill ? 'text-green-400' : 'text-red-400'))"
-                                                x-text="event.type === 'ENCOUNTER_START' || event.type === 'MANUAL_RECORDING_START' ? 'PULL' : (event.type === 'MANUAL_RECORDING_STOP' ? 'MANUAL' : (event.is_kill ? 'KILL' : 'WIPE'))"
-                                                </td>
-                                        <td class=" py-2 pr-4 text-gray-500 w-20"
-                                            x-text="formatEventTime(event.timestamp)">
+                <div class="flex items-center justify-between">
+                    <span class="text-gray-400">Tailing</span>
+                    <div class="flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full"
+                            :class="status.log_monitor?.is_tailing ? 'bg-green-500' : 'bg-gray-600'"></span>
+                        <span x-text="status.log_monitor?.is_tailing ? 'Active' : 'Idle'"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Event log -->
+            <div class="mt-6">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-sm font-medium text-gray-400">Event Log</h3>
+                    <div class="flex items-center gap-3">
+                        <!-- Filter buttons -->
+                        <div class="flex gap-1">
+                            <button @click="eventFilter = ''"
+                                :class="eventFilter === '' ? 'bg-amber-500/20 text-amber-400 border-amber-500/40' : 'bg-gray-700 text-gray-400 border-gray-600'"
+                                class="text-xs px-2 py-0.5 rounded border transition-colors">All</button>
+                            <button @click="eventFilter = 'ENCOUNTER'"
+                                :class="eventFilter === 'ENCOUNTER' ? 'bg-amber-500/20 text-amber-400 border-amber-500/40' : 'bg-gray-700 text-gray-400 border-gray-600'"
+                                class="text-xs px-2 py-0.5 rounded border transition-colors">Boss</button>
+                            <button @click="eventFilter = 'CHALLENGE'"
+                                :class="eventFilter === 'CHALLENGE' ? 'bg-purple-500/20 text-purple-400 border-purple-500/40' : 'bg-gray-700 text-gray-400 border-gray-600'"
+                                class="text-xs px-2 py-0.5 rounded border transition-colors">M+</button>
+                            <button @click="eventFilter = 'MANUAL'"
+                                :class="eventFilter === 'MANUAL' ? 'bg-blue-500/20 text-blue-400 border-blue-500/40' : 'bg-gray-700 text-gray-400 border-gray-600'"
+                                class="text-xs px-2 py-0.5 rounded border transition-colors">Manual</button>
+                        </div>
+                        <!-- Auto-scroll toggle -->
+                        <button @click="autoScroll = !autoScroll"
+                            :class="autoScroll ? 'text-green-400' : 'text-gray-500'"
+                            class="text-xs flex items-center gap-1 transition-colors" title="Toggle auto-scroll">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M19 13l-7 7-7-7m14-8l-7 7-7-7" />
+                            </svg>
+                            <span x-text="autoScroll ? 'Auto' : 'Paused'"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="bg-gray-900/50 rounded-lg overflow-hidden">
+                    <template x-if="filteredEvents.length === 0">
+                        <p class="text-center text-gray-500 py-6 text-sm">No events yet</p>
+                    </template>
+                    <template x-if="filteredEvents.length > 0">
+                        <div class="overflow-y-auto max-h-64 custom-scrollbar" x-ref="eventLogContainer">
+                            <table class="w-full text-sm">
+                                <template x-for="(event, idx) in filteredEvents" :key="idx">
+                                    <tr class="border-b border-gray-800/60 last:border-0 hover:bg-gray-800/30">
+                                        <td class="py-2 pl-3 w-28">
+                                            <span class="text-xs font-medium px-1.5 py-0.5 rounded"
+                                                :class="{
+                                                    'bg-red-900/40 text-red-400': event.type === 'ENCOUNTER_END' && !event.is_kill,
+                                                    'bg-green-900/40 text-green-400': event.type === 'ENCOUNTER_END' && event.is_kill,
+                                                    'bg-blue-900/40 text-blue-400': event.type === 'MANUAL',
+                                                    'bg-amber-900/40 text-amber-400': event.type === 'ENCOUNTER_START',
+                                                    'bg-purple-900/40 text-purple-400': event.type === 'CHALLENGE_MODE_START' || event.type === 'CHALLENGE_MODE_END',
+                                                    'bg-gray-700 text-gray-400': !['ENCOUNTER_END','ENCOUNTER_START','MANUAL','CHALLENGE_MODE_START','CHALLENGE_MODE_END'].includes(event.type)
+                                                }"
+                                                x-text="event.type === 'MANUAL' ? 'MANUAL'
+                                                    : event.type === 'ENCOUNTER_END' ? (event.is_kill ? 'KILL' : 'WIPE')
+                                                    : event.type === 'ENCOUNTER_START' ? 'PULL'
+                                                    : event.type === 'CHALLENGE_MODE_START' ? 'M+ START'
+                                                    : event.type === 'CHALLENGE_MODE_END' ? 'M+ END'
+                                                    : event.type">
+                                            </span>
                                         </td>
-                                        <td class="py-2 text-gray-300" x-text="event.boss_name"></td>
+                                        <td class="py-2 pr-4 text-gray-500 w-20" x-text="formatEventTime(event.timestamp)"></td>
+                                        <td class="py-2 text-gray-300" x-text="event.boss_name || event.dungeon_name || ''"></td>
                                         <td class="py-2 pl-4 pr-3 text-right text-gray-400 w-24"
-                                            x-text="event.type === 'ENCOUNTER_END' ? formatDuration(event.duration || 0) : ''">
+                                            x-text="(event.type === 'ENCOUNTER_END' || event.type === 'CHALLENGE_MODE_END') && event.duration ? formatDuration(event.duration) : ''">
                                         </td>
                                     </tr>
                                 </template>
                             </table>
-                        </template>
-                    </div>
+                        </div>
+                    </template>
                 </div>
             </div>
         </section>
 
+        <!-- Recent Recordings -->
         <section class="bg-gray-800 rounded-lg p-6 mt-6">
             <div class="flex items-center justify-between mb-4">
                 <h2 class="text-lg font-semibold text-gray-300 flex items-center gap-2">
@@ -269,8 +334,7 @@
                     <div @click="openPreview(rec)"
                         class="flex items-center justify-between py-3 px-3 bg-gray-700/30 rounded-lg hover:bg-gray-700/50 transition-colors cursor-pointer">
                         <div class="flex items-center gap-3 min-w-0 flex-1">
-                            <svg class="w-8 h-8 text-gray-500 shrink-0" fill="none" stroke="currentColor"
-                                viewBox="0 0 24 24">
+                            <svg class="w-8 h-8 shrink-0 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z">
                                 </path>
@@ -278,18 +342,19 @@
                                     d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                             </svg>
                             <div class="min-w-0">
-                                <p class="text-gray-200 truncate" x-text="rec.name"></p>
-                                <p class="text-gray-500 text-sm">
+                                <p class="text-gray-200 truncate text-sm" x-text="rec.name"></p>
+                                <p class="text-gray-500 text-xs mt-0.5">
                                     <span x-text="formatFileSize(rec.size)"></span>
-                                    <span class="mx-1">•</span>
+                                    <span class="mx-1">·</span>
                                     <span x-text="formatDate(rec.modified)"></span>
                                 </p>
                             </div>
                         </div>
-                        <a :href="'/video/' + rec.name.split('/').map(encodeURIComponent).join('/')" target="_blank"
-                            @click.stop class="p-2 text-gray-400 hover:text-amber-400 transition-colors shrink-0"
-                            title="Open in new tab">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <a :href="'/video/' + rec.name.split('/').map(encodeURIComponent).join('/')"
+                            target="_blank"
+                            @click.stop
+                            class="ml-3 shrink-0 p-1.5 text-gray-500 hover:text-amber-400 transition-colors rounded">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14">
                                 </path>
@@ -300,12 +365,70 @@
             </div>
         </section>
 
+        <!-- Cloud Upload Status (shown only when cloud is enabled) -->
+        <section class="bg-gray-800 rounded-lg p-6 mt-6" x-show="cloudStatus.enabled" x-cloak>
+            <h2 class="text-lg font-semibold text-gray-300 mb-4 flex items-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12">
+                    </path>
+                </svg>
+                Cloud Upload
+                <span class="ml-auto text-xs px-2 py-1 rounded-full"
+                    :class="cloudStatus.authenticated ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'"
+                    x-text="cloudStatus.authenticated ? 'Authenticated' : 'Not authenticated'">
+                </span>
+            </h2>
+
+            <!-- Active upload progress -->
+            <div x-show="cloudStatus.queue?.active_upload" x-cloak class="mb-4">
+                <div class="flex items-center justify-between text-sm mb-1">
+                    <span class="text-gray-400 truncate" x-text="cloudStatus.queue?.active_upload"></span>
+                    <span class="text-gray-400 ml-2 shrink-0" x-text="uploadSpeed"></span>
+                </div>
+                <div class="h-2 bg-gray-700 rounded-full overflow-hidden">
+                    <div class="h-full bg-amber-500 rounded-full transition-all duration-300"
+                        :style="'width:' + (uploadProgress || 0) + '%'"></div>
+                </div>
+                <p class="text-xs text-gray-500 mt-1" x-text="(uploadProgress || 0).toFixed(1) + '%'"></p>
+            </div>
+
+            <!-- Stats row -->
+            <div class="grid grid-cols-3 gap-4 text-center">
+                <div>
+                    <div class="text-2xl font-bold text-amber-400" x-text="cloudStatus.queue?.queue_size || 0"></div>
+                    <div class="text-xs text-gray-500">Queued</div>
+                </div>
+                <div>
+                    <div class="text-2xl font-bold text-green-400" x-text="cloudStatus.queue?.completed_count || 0"></div>
+                    <div class="text-xs text-gray-500">Completed</div>
+                </div>
+                <div>
+                    <div class="text-2xl font-bold text-red-400" x-text="cloudStatus.queue?.failed_count || 0"></div>
+                    <div class="text-xs text-gray-500">Failed</div>
+                </div>
+            </div>
+
+            <!-- Provider & storage info -->
+            <div class="mt-4 pt-4 border-t border-gray-700 flex items-center justify-between text-sm">
+                <span class="text-gray-500" x-text="'Provider: ' + (cloudStatus.provider || '—')"></span>
+                <template x-if="cloudStatus.storage?.used_gb !== undefined">
+                    <span class="text-gray-500">
+                        <span x-text="cloudStatus.storage.used_gb.toFixed(1)"></span> /
+                        <span x-text="cloudStatus.storage.total_gb ? cloudStatus.storage.total_gb.toFixed(0) + ' GB' : '—'"></span>
+                        used
+                    </span>
+                </template>
+            </div>
+        </section>
+
+        <!-- Video preview modal -->
         <div x-show="previewRecording" x-cloak
-            class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" @click.self="closePreview()"
+            class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"
+            @click.self="closePreview()"
             @keydown.escape.window="closePreview()">
             <div class="bg-gray-800 rounded-lg max-w-4xl w-full max-h-[90vh] flex flex-col">
 
-                <!-- Header -->
                 <div class="flex items-center justify-between p-4 border-b border-gray-700">
                     <h3 class="text-lg font-semibold text-gray-200 truncate pr-4" x-text="previewRecording?.name"></h3>
                     <button @click="closePreview()" class="p-1 text-gray-400 hover:text-white transition-colors">
@@ -316,10 +439,8 @@
                     </button>
                 </div>
 
-                <!-- Video + custom controls -->
                 <div class="p-4 flex-1 min-h-0">
                     <div>
-                        <!-- Video element -->
                         <div class="aspect-video bg-black rounded-t-lg overflow-hidden">
                             <video x-ref="previewPlayer" class="w-full h-full"
                                 :src="previewRecording ? '/video/' + previewRecording.name.split('/').map(encodeURIComponent).join('/') : ''"
@@ -329,35 +450,23 @@
                             </video>
                         </div>
 
-                        <!-- Custom controls bar -->
                         <div class="bg-gray-900 rounded-b-lg px-3 pt-2 pb-3 select-none">
-
-                            <!-- Timeline -->
                             <div class="relative h-5 flex items-center mb-2 group cursor-pointer"
                                 @click="previewSeekTo($event)" @mousemove="previewHoverSeek($event)"
                                 @mouseleave="previewSeekPreviewTime = null" x-ref="previewTimeline">
 
-                                <!-- Track background -->
                                 <div class="absolute inset-x-0 h-1.5 bg-gray-700 rounded-full"></div>
-
-                                <!-- Played portion -->
                                 <div class="absolute left-0 h-1.5 bg-amber-500 rounded-full pointer-events-none"
                                     :style="'width:' + previewPlayedPercent + '%'"></div>
 
-                                <!-- Death markers -->
                                 <template x-for="(pct, i) in previewDeathMarkerPositions" :key="i">
                                     <div class="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 group/marker"
                                         :style="'left:' + pct + '%'">
-                                        <div class="w-4 h-4 rounded-full bg-red-600 border-2 border-red-300 flex items-center justify-center shadow-lg
-                                            opacity-80 group-hover/marker:opacity-100 transition-opacity cursor-pointer"
+                                        <div class="w-4 h-4 rounded-full bg-red-600 border-2 border-red-300 flex items-center justify-center shadow-lg opacity-80 group-hover/marker:opacity-100 transition-opacity cursor-pointer"
                                             @click.stop="previewSeekToMarker(pct)">
                                             <span class="text-[9px] leading-none">💀</span>
                                         </div>
-                                        <!-- Tooltip -->
-                                        <div
-                                            class="absolute bottom-6 left-1/2 -translate-x-1/2 bg-gray-900 text-gray-200
-                                            text-xs rounded px-2 py-1 whitespace-nowrap pointer-events-none
-                                            opacity-0 group-hover/marker:opacity-100 transition-opacity border border-gray-700 shadow-xl">
+                                        <div class="absolute bottom-6 left-1/2 -translate-x-1/2 bg-gray-900 text-gray-200 text-xs rounded px-2 py-1 whitespace-nowrap pointer-events-none opacity-0 group-hover/marker:opacity-100 transition-opacity border border-gray-700 shadow-xl">
                                             <span x-text="previewFormatTime(previewDeathTimesSeconds[i])"></span>
                                             <template x-if="previewDeathNames[i]">
                                                 <span x-text="' – ' + previewDeathNames[i]"></span>
@@ -366,44 +475,30 @@
                                     </div>
                                 </template>
 
-                                <!-- Hover thumb -->
                                 <div x-show="previewSeekPreviewTime !== null"
                                     class="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 bg-white rounded-full pointer-events-none shadow"
                                     :style="'left:' + previewSeekPreviewPercent + '%'"></div>
                             </div>
 
-                            <!-- Controls row -->
                             <div class="flex items-center gap-3">
-
-                                <!-- Play/Pause -->
-                                <button @click="previewTogglePlay()"
-                                    class="text-gray-300 hover:text-white transition-colors">
-                                    <svg x-show="!previewIsPlaying" class="w-6 h-6" fill="currentColor"
-                                        viewBox="0 0 24 24">
-                                        <path d="M8 5v14l11-7z" />
+                                <button @click="previewTogglePlay()" class="text-gray-300 hover:text-white transition-colors">
+                                    <svg x-show="!previewIsPlaying" class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
                                     </svg>
-                                    <svg x-show="previewIsPlaying" class="w-6 h-6" fill="currentColor"
-                                        viewBox="0 0 24 24">
-                                        <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                                    <svg x-show="previewIsPlaying" class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
                                     </svg>
                                 </button>
 
-                                <!-- Mute -->
-                                <button @click="previewToggleMute()"
-                                    class="text-gray-300 hover:text-white transition-colors">
-                                    <svg x-show="!previewIsMuted" class="w-5 h-5" fill="currentColor"
-                                        viewBox="0 0 24 24">
-                                        <path
-                                            d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z" />
+                                <button @click="previewToggleMute()" class="text-gray-300 hover:text-white transition-colors">
+                                    <svg x-show="!previewIsMuted" class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM14.657 2.929a1 1 0 011.414 0A9.972 9.972 0 0119 10a9.972 9.972 0 01-2.929 7.071 1 1 0 01-1.414-1.414A7.971 7.971 0 0017 10c0-2.21-.894-4.208-2.343-5.657a1 1 0 010-1.414zm-2.829 2.828a1 1 0 011.415 0A5.983 5.983 0 0115 10a5.984 5.984 0 01-1.757 4.243 1 1 0 01-1.415-1.415A3.984 3.984 0 0013 10a3.983 3.983 0 00-1.172-2.828 1 1 0 010-1.415z" clip-rule="evenodd" />
                                     </svg>
-                                    <svg x-show="previewIsMuted" class="w-5 h-5" fill="currentColor"
-                                        viewBox="0 0 24 24">
-                                        <path
-                                            d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" />
+                                    <svg x-show="previewIsMuted" class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM12.293 7.293a1 1 0 011.414 0L15 8.586l1.293-1.293a1 1 0 111.414 1.414L16.414 10l1.293 1.293a1 1 0 01-1.414 1.414L15 11.414l-1.293 1.293a1 1 0 01-1.414-1.414L13.586 10l-1.293-1.293a1 1 0 010-1.414z" clip-rule="evenodd" />
                                     </svg>
                                 </button>
 
-                                <!-- Time -->
                                 <span class="text-xs text-gray-400 tabular-nums">
                                     <span x-text="previewFormatTime(previewCurrentTime)"></span>
                                     <span class="text-gray-600"> / </span>
@@ -412,17 +507,13 @@
 
                                 <div class="flex-1"></div>
 
-                                <!-- Death count badge -->
                                 <template x-if="previewDeathMarkerPositions.length > 0">
-                                    <span
-                                        class="text-xs bg-red-600/30 text-red-400 border border-red-600/40 rounded-full px-2 py-0.5 flex items-center gap-1">
+                                    <span class="text-xs bg-red-600/30 text-red-400 border border-red-600/40 rounded-full px-2 py-0.5 flex items-center gap-1">
                                         💀 <span x-text="previewDeathMarkerPositions.length"></span>
                                     </span>
                                 </template>
 
-                                <!-- Fullscreen -->
-                                <button @click="$refs.previewPlayer.requestFullscreen()"
-                                    class="text-gray-300 hover:text-white transition-colors">
+                                <button @click="$refs.previewPlayer.requestFullscreen()" class="text-gray-300 hover:text-white transition-colors">
                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                             d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
@@ -433,7 +524,6 @@
                     </div>
                 </div>
 
-                <!-- Footer -->
                 <div class="flex items-center justify-between p-4 border-t border-gray-700">
                     <div class="text-sm text-gray-400">
                         <span x-text="formatFileSize(previewRecording?.size || 0)"></span>
@@ -449,86 +539,6 @@
             </div>
         </div>
 
-        <!-- Cloud Upload Status -->
-        <section class="bg-gray-800 rounded-lg p-6 mt-6" x-show="cloudStatus.enabled">
-            <h2 class="text-lg font-semibold text-gray-300 mb-4 flex items-center gap-2">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12">
-                    </path>
-                </svg>
-                Cloud Upload
-                <span class="ml-auto text-xs px-2 py-1 rounded-full"
-                    :class="cloudStatus.authenticated ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'">
-                    <span x-text="cloudStatus.authenticated ? 'Connected' : 'Disconnected'"></span>
-                </span>
-            </h2>
-
-            <div class="space-y-3">
-                <!-- Storage Info -->
-                <div x-show="cloudStatus.storage" class="flex items-center justify-between">
-                    <span class="text-gray-400 text-sm">Storage</span>
-                    <div class="text-right">
-                        <span class="text-gray-200 text-sm" x-text="cloudStatus.storage?.usage_gb || '0'"></span>
-                        <span class="text-gray-500 text-sm">GB / </span>
-                        <span class="text-gray-200 text-sm" x-text="cloudStatus.storage?.limit_gb || '0'"></span>
-                        <span class="text-gray-500 text-sm">GB</span>
-                    </div>
-                </div>
-
-                <!-- Storage Bar -->
-                <div x-show="cloudStatus.storage" class="w-full bg-gray-700 rounded-full h-2">
-                    <div class="h-2 rounded-full transition-all duration-300"
-                        :class="cloudStatus.storage?.usage_percent > 90 ? 'bg-red-500' : (cloudStatus.storage?.usage_percent > 70 ? 'bg-yellow-500' : 'bg-green-500')"
-                        :style="`width: ${Math.min(cloudStatus.storage?.usage_percent || 0, 100)}%`">
-                    </div>
-                </div>
-
-                <!-- Upload Queue -->
-                <div x-show="cloudStatus.queue_size > 0 || cloudStatus.active_upload"
-                    class="pt-2 border-t border-gray-700">
-                    <div class="flex items-center justify-between mb-2">
-                        <span class="text-gray-400 text-sm">Upload Queue</span>
-                        <span class="text-amber-400 text-sm font-medium" x-text="cloudStatus.queue_size"></span>
-                    </div>
-
-                    <!-- Active Upload -->
-                    <div x-show="cloudStatus.active_upload" class="bg-gray-700/50 rounded-lg p-3">
-                        <div class="flex items-center gap-2 mb-2">
-                            <svg class="w-4 h-4 text-amber-400 animate-spin" fill="none" stroke="currentColor"
-                                viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
-                                </path>
-                            </svg>
-                            <span class="text-gray-300 text-sm font-medium">Uploading</span>
-                        </div>
-                        <p class="text-gray-400 text-sm truncate" x-text="cloudStatus.active_upload"></p>
-                        <div class="mt-2 w-full bg-gray-600 rounded-full h-1.5">
-                            <div class="bg-amber-500 h-1.5 rounded-full transition-all duration-300"
-                                :style="`width: ${uploadProgress || 0}%`">
-                            </div>
-                        </div>
-                        <div class="flex justify-between mt-1 text-xs text-gray-500">
-                            <span x-text="`${uploadProgress || 0}%`"></span>
-                            <span x-text="uploadSpeed || ''"></span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Upload Stats -->
-                <div class="grid grid-cols-2 gap-3 pt-2 border-t border-gray-700">
-                    <div class="text-center">
-                        <div class="text-2xl font-bold text-green-400" x-text="cloudStatus.completed_count || 0"></div>
-                        <div class="text-xs text-gray-500">Completed</div>
-                    </div>
-                    <div class="text-center">
-                        <div class="text-2xl font-bold text-red-400" x-text="cloudStatus.failed_count || 0"></div>
-                        <div class="text-xs text-gray-500">Failed</div>
-                    </div>
-                </div>
-            </div>
-        </section>
     </div>
 
     <script>
@@ -561,18 +571,39 @@
                     enabled: false,
                     authenticated: false,
                     provider: '',
-                    queue_size: 0,
-                    active_upload: null,
-                    completed_count: 0,
-                    failed_count: 0,
+                    queue: {},
                     storage: null,
                 },
                 uploadProgress: 0,
                 uploadSpeed: '',
 
+                // Event log filter & auto-scroll
+                eventFilter: '',
+                autoScroll: true,
+
+                // OBS reconnect state
+                obsReconnecting: false,
+
+                // Live timer — incremented locally each second so the display
+                // updates smoothly without waiting for the 0.5s socket broadcast
+                liveRecordingDuration: 0,
+                _timerInterval: null,
+
                 init() {
                     this.connectSocket();
                     this.fetchRecordings();
+                    // Tick the live duration counter every second
+                    this._timerInterval = setInterval(() => {
+                        if (this.status.recorder?.recording) {
+                            this.liveRecordingDuration = (this.status.recorder?.recording_duration || 0) +
+                                (Date.now() / 1000 - this._lastStatusTs);
+                        }
+                    }, 1000);
+                },
+
+                get filteredEvents() {
+                    if (!this.eventFilter) return this.events;
+                    return this.events.filter(e => e.type && e.type.includes(this.eventFilter));
                 },
 
                 async fetchRecordings() {
@@ -598,6 +629,16 @@
 
                     this.socket.on('status', (data) => {
                         this.status = data;
+                        this._lastStatusTs = Date.now() / 1000;
+                        // Sync live duration from authoritative value on every broadcast
+                        this.liveRecordingDuration = data.recorder?.recording_duration || 0;
+                        // Auto-scroll event log
+                        if (this.autoScroll) {
+                            this.$nextTick(() => {
+                                const el = this.$refs.eventLogContainer;
+                                if (el) el.scrollTop = el.scrollHeight;
+                            });
+                        }
                     });
 
                     this.socket.on('event_log', (data) => {
@@ -608,6 +649,12 @@
                         this.events.push(event);
                         if (this.events.length > 50) {
                             this.events = this.events.slice(-50);
+                        }
+                        if (this.autoScroll) {
+                            this.$nextTick(() => {
+                                const el = this.$refs.eventLogContainer;
+                                if (el) el.scrollTop = el.scrollHeight;
+                            });
                         }
                     });
 
@@ -626,8 +673,9 @@
                 },
 
                 formatDuration(seconds) {
-                    const mins = Math.floor(seconds / 60);
-                    const secs = Math.floor(seconds % 60);
+                    const s = Math.max(0, Math.floor(seconds || 0));
+                    const mins = Math.floor(s / 60);
+                    const secs = s % 60;
                     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
                 },
 
@@ -648,12 +696,21 @@
                     }
                 },
 
+                async reconnectOBS() {
+                    this.obsReconnecting = true;
+                    try {
+                        await fetch('/api/obs/reconnect', { method: 'POST' });
+                    } catch (e) {
+                        console.error('Reconnect failed:', e);
+                    } finally {
+                        this.obsReconnecting = false;
+                    }
+                },
+
                 formatEventTime(timestamp) {
                     if (!timestamp) return '';
                     const match = timestamp.match(/(\d+):(\d+):(\d+)/);
-                    if (match) {
-                        return `${match[1]}:${match[2]}:${match[3]}`;
-                    }
+                    if (match) return `${match[1]}:${match[2]}:${match[3]}`;
                     return timestamp.substring(0, 8);
                 },
 
@@ -663,7 +720,7 @@
                         7: 'LFR', 14: 'Normal', 15: 'Heroic',
                         16: 'Mythic', 17: 'LFR', 23: 'Mythic'
                     };
-                    return names[id] || `Difficulty ${id}`;
+                    return names[id] || (id ? `Difficulty ${id}` : '');
                 },
 
                 formatFileSize(bytes) {
@@ -678,12 +735,10 @@
                     const date = new Date(timestamp * 1000);
                     const now = new Date();
                     const diff = now - date;
-
                     if (diff < 60000) return 'Just now';
                     if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
                     if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
                     if (diff < 604800000) return Math.floor(diff / 86400000) + 'd ago';
-
                     return date.toLocaleDateString();
                 },
 
@@ -695,28 +750,22 @@
                 async openPreview(rec) {
                     this.previewRecording = rec;
                     this.previewMetadata = null;
-                    this.previewDeathMarkerPositions = [];
-                    this.previewDeathTimesSeconds = [];
-                    this.previewDeathNames = [];
+                    this.previewIsPlaying = false;
                     this.previewCurrentTime = 0;
                     this.previewDuration = 0;
                     this.previewPlayedPercent = 0;
-
-                    this.$nextTick(() => {
-                        if (this.$refs.previewPlayer) {
-                            this.$refs.previewPlayer.load();
-                        }
-                    });
-
+                    this.previewDeathMarkerPositions = [];
+                    this.previewDeathTimesSeconds = [];
+                    this.previewDeathNames = [];
+                    // Try to fetch companion JSON metadata
                     try {
-                        const res = await fetch('/api/recordings/' + rec.name.split('/').map(encodeURIComponent).join('/') + '/metadata');
+                        const jsonName = rec.name.replace(/\.[^/.]+$/, '.json');
+                        const res = await fetch('/api/recording-metadata/' + jsonName.split('/').map(encodeURIComponent).join('/'));
                         if (res.ok) {
                             this.previewMetadata = await res.json();
-                            this.previewBuildDeathMarkers();
+                            this.$nextTick(() => this.previewBuildDeathMarkers());
                         }
-                    } catch (e) {
-                        console.warn('No metadata for', rec.name);
-                    }
+                    } catch (_) {}
                 },
 
                 closePreview() {
@@ -724,14 +773,10 @@
                         this.$refs.previewPlayer.pause();
                     }
                     this.previewRecording = null;
-                    this.previewMetadata = null;
-                    this.previewDeathMarkerPositions = [];
-                    this.previewDeathTimesSeconds = [];
-                    this.previewDeathNames = [];
                 },
 
                 previewOnVideoLoaded() {
-                    this.previewDuration = this.$refs.previewPlayer.duration || 0;
+                    this.previewDuration = this.$refs.previewPlayer?.duration || 0;
                     this.previewBuildDeathMarkers();
                 },
 
@@ -739,18 +784,13 @@
                     this.previewDeathMarkerPositions = [];
                     this.previewDeathTimesSeconds = [];
                     this.previewDeathNames = [];
-
                     const meta = this.previewMetadata;
                     if (!meta || !meta.deaths || meta.deaths.length === 0) return;
-                    if (!meta.start || !meta.duration) return;
-
-                    const durationSecs = meta.duration;
-
-                    meta.deaths.forEach((death) => {
-                        // death.timestamp is seconds from encounter start (WCR format)
+                    const durationSecs = meta.duration || this.previewDuration;
+                    if (!durationSecs) return;
+                    meta.deaths.forEach(death => {
                         const offsetSecs = typeof death === 'object' ? death.timestamp : death;
                         if (offsetSecs < 0 || offsetSecs > durationSecs) return;
-
                         this.previewDeathMarkerPositions.push((offsetSecs / durationSecs) * 100);
                         this.previewDeathTimesSeconds.push(offsetSecs);
                         this.previewDeathNames.push(typeof death === 'object' ? (death.name || '') : '');
@@ -782,8 +822,7 @@
                     const bar = this.$refs.previewTimeline;
                     if (!v || !bar || !this.previewDuration) return;
                     const rect = bar.getBoundingClientRect();
-                    const pct = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
-                    v.currentTime = pct * this.previewDuration;
+                    v.currentTime = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)) * this.previewDuration;
                 },
 
                 previewSeekToMarker(pct) {
@@ -806,7 +845,7 @@
                     const m = Math.floor(secs / 60);
                     const s = Math.floor(secs % 60).toString().padStart(2, '0');
                     return `${m}:${s}`;
-                }
+                },
             };
         }
     </script>

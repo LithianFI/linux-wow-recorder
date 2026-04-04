@@ -1,5 +1,5 @@
 @echo off
-setlocal
+setlocal EnableDelayedExpansion
 
 REM ============================================================================
 REM WoW Raid Recorder Launcher for Windows
@@ -12,6 +12,18 @@ cd /d "%SCRIPT_DIR%"
 echo =========================================
 echo    WoW Raid Recorder Launcher
 echo =========================================
+
+REM Parse --no-browser flag from arguments, pass the rest to python
+set OPEN_BROWSER=true
+set PYTHON_ARGS=
+
+for %%A in (%*) do (
+    if /I "%%A"=="--no-browser" (
+        set OPEN_BROWSER=false
+    ) else (
+        set PYTHON_ARGS=!PYTHON_ARGS! %%A
+    )
+)
 
 REM Check if virtual environment exists
 if not exist "venv" (
@@ -45,9 +57,12 @@ echo Web interface: http://localhost:5001
 echo Press Ctrl+C to stop the application
 echo.
 
-REM Open browser automatically after delay
-echo Opening browser...
-start "" cmd /c "timeout /t 2 /nobreak >nul && start http://localhost:5001"
+if "%OPEN_BROWSER%"=="true" (
+    echo Opening browser... (use --no-browser to skip^)
+    start "" cmd /c "timeout /t 2 /nobreak >nul && start http://localhost:5001"
+) else (
+    echo Browser auto-open skipped (--no-browser^)
+)
 
-REM Run the application
-python run.py %*
+REM Run the application (remaining args forwarded to python)
+python run.py %PYTHON_ARGS%

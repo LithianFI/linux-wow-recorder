@@ -126,6 +126,19 @@ def stop_manual_recording():
         return jsonify({'success': True, 'message': 'Manual recording stopped'})
     return jsonify({'success': False, 'error': 'Failed to stop recording'}), 500
 
+@app.route('/api/obs/reconnect', methods=['POST'])
+def reconnect_obs():
+    """Attempt to reconnect to OBS WebSocket."""
+    s = get_state()
+    if not s.obs_client:
+        return jsonify({'error': 'OBS client not initialized'}), 503
+    try:
+        success = s.obs_client.connect()
+        if success:
+            return jsonify({'success': True, 'message': 'Reconnected to OBS'})
+        return jsonify({'success': False, 'error': 'Failed to connect to OBS'}), 500
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/config', methods=['GET'])
 def get_config():
