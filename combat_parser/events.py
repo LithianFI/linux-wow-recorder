@@ -167,11 +167,6 @@ class CombatEvent:
         """Check if this is a CHALLENGE_MODE_END event."""
         return self.event_type == "CHALLENGE_MODE_END"
     
-    @property
-    def is_zone_change(self) -> bool:
-        """Check if this is a ZONE_CHANGE event."""
-        return self.event_type == "ZONE_CHANGE"
-    
     def get_boss_info(self) -> Optional[BossInfo]:
         """Extract boss information from ENCOUNTER_START event."""
         if not self.is_encounter_start or len(self.fields) < 6:

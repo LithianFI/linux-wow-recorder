@@ -23,7 +23,7 @@ from constants import LOG_PREFIXES
 _RELEVANT_EVENTS = frozenset((
     "ENCOUNTER_START", "ENCOUNTER_END",
     "CHALLENGE_MODE_START", "CHALLENGE_MODE_END",
-    "ZONE_CHANGE", "COMBATANT_INFO", "UNIT_DIED",
+    "COMBATANT_INFO", "UNIT_DIED",
 ))
 
 
@@ -103,8 +103,6 @@ class CombatParser:
             self._handle_dungeon_start(event)
         elif event.is_dungeon_end:
             self._handle_dungeon_end(event, "dungeon_complete")
-        elif event.is_zone_change:
-            self._handle_zone_change(event)
         elif event.is_encounter_start:
             self._handle_encounter_start(event)
         elif event.is_encounter_end:
@@ -378,29 +376,6 @@ class CombatParser:
         self.state.reset()
  
         print(f"{LOG_PREFIXES['PARSER']} Ended M+ dungeon: {dungeon_info.name} ({reason})")
-
-    def _handle_zone_change(self, event: CombatEvent):
-        """Handle ZONE_CHANGE event during dungeon runs."""
-        # Only process if we're in an active dungeon
-        if not self.state.dungeon_active:
-            return
-
-        print(f"{LOG_PREFIXES['PARSER']} Zone change detected during dungeon run")
-
-        # Check if we changed to a different instance (likely left dungeon)
-        try:
-            # ZONE_CHANGE format: uiMapID, zoneName
-            # If zoneName changes significantly, assume dungeon ended
-            if len(event.fields) >= 3:
-                new_zone = event.fields[2]
-                current_dungeon = self.state.dungeon_name
-
-                # Simple check: if zone doesn't contain dungeon name (case-insensitive)
-                if current_dungeon and current_dungeon.lower() not in new_zone.lower():
-                    print(f"{LOG_PREFIXES['PARSER']} Zone changed from dungeon to: {new_zone}")
-                    self._handle_dungeon_end(event, "zone_change")
-        except (IndexError, ValueError):
-            pass
 
     def _handle_dungeon_timeout(self):
         """Handle dungeon timeout due to inactivity."""
