@@ -45,19 +45,11 @@ class DungeonMonitor:
     
     def _monitor_loop(self):
         """Monitor dungeon for inactivity timeout."""
+        # Idle timeout is disabled for dungeon runs: logs are buffered during
+        # boss fights so activity goes quiet mid-pull even when the run is
+        # ongoing. CHALLENGE_MODE_END is the only reliable termination signal.
         while self._running:
-            try:
-                if self.state.dungeon_active:
-                    timeout = self.config.DUNGEON_TIMEOUT_SECONDS
-                    if self.state.is_dungeon_idle(timeout):
-                        print(f"{LOG_PREFIXES['DUNGEON']} Dungeon idle for {timeout}s, triggering timeout")
-                        if self.on_timeout:
-                            self.on_timeout()
-                
-                time.sleep(self._check_interval)
-            except Exception as e:
-                print(f"{LOG_PREFIXES['DUNGEON']} Error in monitor: {e}")
-                time.sleep(self._check_interval)
+            time.sleep(self._check_interval)
     
     def is_running(self) -> bool:
         """Check if monitor is running."""

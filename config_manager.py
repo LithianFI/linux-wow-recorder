@@ -48,6 +48,8 @@ class ConfigManager:
             'file_naming_scheme': 'simple',
             'generate_metadata_json': 'false',
             'track_player_deaths': 'false',
+            'retention_max_age_days': '0',
+            'retention_max_per_group': '0',
         },
         'Difficulties': {
             'record_lfr':    'false',
@@ -97,6 +99,8 @@ class ConfigManager:
             'generate_metadata_json':  lambda v: str(v).lower(),
             'track_player_deaths':     lambda v: str(v).lower(),
             'organize_by_date':        lambda v: str(v).lower(),
+            'retention_max_age_days':  str,
+            'retention_max_per_group': str,
         }),
         'difficulties': ('Difficulties', {
             'record_lfr':    lambda v: str(v).lower(),
@@ -391,6 +395,16 @@ proton_folder =
     def ORGANIZE_BY_DATE(self) -> bool:
         """Move finished recordings into YYYY-MM-DD subfolders."""
         return self.config.getboolean('Recording', 'organize_by_date', fallback=False)
+
+    @property
+    def RETENTION_MAX_AGE_DAYS(self) -> int:
+        """Delete recordings older than this many days (0 = disabled)."""
+        return self.config.getint('Recording', 'retention_max_age_days', fallback=0)
+
+    @property
+    def RETENTION_MAX_PER_GROUP(self) -> int:
+        """Keep at most N recordings per (difficulty, boss) group (0 = disabled)."""
+        return self.config.getint('Recording', 'retention_max_per_group', fallback=0)
 
     @property
     def RECORD_LFR(self) -> bool:

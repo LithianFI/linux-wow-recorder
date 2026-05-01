@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from typing import Optional, List
 from datetime import datetime
 
+from constants import DIFFICULTY_NAMES
+
 
 @dataclass
 class BossInfo:
@@ -32,13 +34,7 @@ class BossInfo:
     @property
     def difficulty_name(self) -> str:
         """Get difficulty name."""
-        difficulties = {
-            1: "Normal", 2: "Heroic", 3: "Mythic", 4: "Mythic+",
-            5: "Timewalking", 7: "LFR", 9: "40Player",
-            14: "Normal", 15: "Heroic", 16: "Mythic", 17: "LFR",
-            23: "Mythic", 24: "Timewalking", 33: "Timewalking",
-        }
-        return difficulties.get(self.difficulty_id, f"Difficulty_{self.difficulty_id}")
+        return DIFFICULTY_NAMES.get(self.difficulty_id, f"Difficulty_{self.difficulty_id}")
 
 
 @dataclass 
@@ -166,6 +162,11 @@ class CombatEvent:
     def is_dungeon_end(self) -> bool:
         """Check if this is a CHALLENGE_MODE_END event."""
         return self.event_type == "CHALLENGE_MODE_END"
+    
+    @property
+    def is_zone_change(self) -> bool:
+        """Check if this is a ZONE_CHANGE event."""
+        return self.event_type == "ZONE_CHANGE"
     
     def get_boss_info(self) -> Optional[BossInfo]:
         """Extract boss information from ENCOUNTER_START event."""

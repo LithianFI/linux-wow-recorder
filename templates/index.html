@@ -459,6 +459,12 @@
                                 <div class="absolute left-0 h-1.5 bg-amber-500 rounded-full pointer-events-none"
                                     :style="'width:' + previewPlayedPercent + '%'"></div>
 
+                                <!-- Clip range highlight (behind death markers, above progress) -->
+                                <template x-if="clipInPercent !== null || clipOutPercent !== null">
+                                    <div class="absolute h-1.5 bg-amber-400/30 border-x-2 border-amber-400 rounded-sm pointer-events-none"
+                                        :style="'left:' + (clipInPercent ?? 0) + '%; width:' + ((clipOutPercent ?? 100) - (clipInPercent ?? 0)) + '%'"></div>
+                                </template>
+
                                 <template x-for="(pct, i) in previewDeathMarkerPositions" :key="i">
                                     <div class="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 group/marker"
                                         :style="'left:' + pct + '%'">
@@ -506,6 +512,38 @@
                                 </span>
 
                                 <div class="flex-1"></div>
+
+                                <!-- Clip controls: Mark In / Mark Out / Export -->
+                                <div class="flex items-center gap-1.5 border-l border-gray-700 pl-3 ml-1">
+                                    <button @click="clipSetIn()" :title="'Mark clip start at ' + previewFormatTime(previewCurrentTime)"
+                                        class="text-xs px-2 py-0.5 rounded border border-gray-600 text-gray-300 hover:text-amber-400 hover:border-amber-500/50 transition-colors">
+                                        <span>In</span>
+                                        <template x-if="clipInSecs !== null">
+                                            <span class="text-amber-400 ml-1 tabular-nums" x-text="previewFormatTime(clipInSecs)"></span>
+                                        </template>
+                                    </button>
+                                    <button @click="clipSetOut()" :title="'Mark clip end at ' + previewFormatTime(previewCurrentTime)"
+                                        class="text-xs px-2 py-0.5 rounded border border-gray-600 text-gray-300 hover:text-amber-400 hover:border-amber-500/50 transition-colors">
+                                        <span>Out</span>
+                                        <template x-if="clipOutSecs !== null">
+                                            <span class="text-amber-400 ml-1 tabular-nums" x-text="previewFormatTime(clipOutSecs)"></span>
+                                        </template>
+                                    </button>
+                                    <button @click="clipExport()" :disabled="!canExportClip || clipBusy"
+                                        :title="canExportClip ? 'Export clip' : 'Set In and Out points first'"
+                                        :class="canExportClip && !clipBusy
+                                            ? 'bg-amber-500/20 text-amber-400 border-amber-500/50 hover:bg-amber-500/30 cursor-pointer'
+                                            : 'bg-gray-700 text-gray-500 border-gray-600 cursor-not-allowed opacity-60'"
+                                        class="text-xs px-2 py-0.5 rounded border transition-colors">
+                                        <span x-text="clipBusy ? 'Exporting…' : 'Export'"></span>
+                                    </button>
+                                    <template x-if="clipInSecs !== null || clipOutSecs !== null">
+                                        <button @click="clipClear()" title="Clear marks"
+                                            class="text-xs text-gray-500 hover:text-gray-300 transition-colors px-1">
+                                            ✕
+                                        </button>
+                                    </template>
+                                </div>
 
                                 <template x-if="previewDeathMarkerPositions.length > 0">
                                     <span class="text-xs bg-red-600/30 text-red-400 border border-red-600/40 rounded-full px-2 py-0.5 flex items-center gap-1">
@@ -566,6 +604,11 @@
                 previewDeathMarkerPositions: [],
                 previewDeathTimesSeconds: [],
                 previewDeathNames: [],
+
+                // Clip export state
+                clipInSecs: null,
+                clipOutSecs: null,
+                clipBusy: false,
 
                 cloudStatus: {
                     enabled: false,
@@ -670,6 +713,14 @@
                         this.uploadProgress = data.progress_percent;
                         this.uploadSpeed = data.upload_speed;
                     });
+
+                    this.socket.on('clip_complete', (data) => {
+                        this.clipBusy = false;
+                        if (data.error) {
+                            alert('Clip export failed: ' + data.error);
+                        }
+                        // 'recordings_updated' fires alongside and refreshes the list
+                    });
                 },
 
                 formatDuration(seconds) {
@@ -757,10 +808,13 @@
                     this.previewDeathMarkerPositions = [];
                     this.previewDeathTimesSeconds = [];
                     this.previewDeathNames = [];
+                    this.clipInSecs = null;
+                    this.clipOutSecs = null;
+                    this.clipBusy = false;
                     // Try to fetch companion JSON metadata
                     try {
-                        const jsonName = rec.name.replace(/\.[^/.]+$/, '.json');
-                        const res = await fetch('/api/recording-metadata/' + jsonName.split('/').map(encodeURIComponent).join('/'));
+                        const encodedName = rec.name.split('/').map(encodeURIComponent).join('/');
+                        const res = await fetch('/api/recordings/' + encodedName + '/metadata');
                         if (res.ok) {
                             this.previewMetadata = await res.json();
                             this.$nextTick(() => this.previewBuildDeathMarkers());
@@ -845,6 +899,69 @@
                     const m = Math.floor(secs / 60);
                     const s = Math.floor(secs % 60).toString().padStart(2, '0');
                     return `${m}:${s}`;
+                },
+
+                // ── Clip export ──────────────────────────────────────
+                get clipInPercent() {
+                    if (this.clipInSecs === null || !this.previewDuration) return null;
+                    return (this.clipInSecs / this.previewDuration) * 100;
+                },
+                get clipOutPercent() {
+                    if (this.clipOutSecs === null || !this.previewDuration) return null;
+                    return (this.clipOutSecs / this.previewDuration) * 100;
+                },
+                get canExportClip() {
+                    return this.clipInSecs !== null
+                        && this.clipOutSecs !== null
+                        && this.clipOutSecs > this.clipInSecs;
+                },
+
+                clipSetIn() {
+                    const t = this.previewCurrentTime;
+                    this.clipInSecs = t;
+                    // Keep In < Out; drop Out if it got invalidated
+                    if (this.clipOutSecs !== null && this.clipOutSecs <= t) {
+                        this.clipOutSecs = null;
+                    }
+                },
+                clipSetOut() {
+                    const t = this.previewCurrentTime;
+                    this.clipOutSecs = t;
+                    if (this.clipInSecs !== null && this.clipInSecs >= t) {
+                        this.clipInSecs = null;
+                    }
+                },
+                clipClear() {
+                    this.clipInSecs = null;
+                    this.clipOutSecs = null;
+                },
+                async clipExport() {
+                    if (!this.canExportClip || !this.previewRecording) return;
+                    this.clipBusy = true;
+                    try {
+                        const url = '/api/recordings/'
+                            + this.previewRecording.name.split('/').map(encodeURIComponent).join('/')
+                            + '/clip';
+                        const res = await fetch(url, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                start: this.clipInSecs,
+                                end: this.clipOutSecs,
+                            }),
+                        });
+                        const data = await res.json();
+                        if (!res.ok) {
+                            console.error('Clip export failed:', data.error);
+                            alert('Clip export failed: ' + (data.error || 'unknown error'));
+                            this.clipBusy = false;
+                        }
+                        // On success we leave clipBusy=true until the socket
+                        // 'clip_complete' event fires (handled in connectSocket).
+                    } catch (e) {
+                        console.error('Clip request error:', e);
+                        this.clipBusy = false;
+                    }
                 },
             };
         }

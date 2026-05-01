@@ -23,7 +23,7 @@ from constants import LOG_PREFIXES
 _RELEVANT_EVENTS = frozenset((
     "ENCOUNTER_START", "ENCOUNTER_END",
     "CHALLENGE_MODE_START", "CHALLENGE_MODE_END",
-    "COMBATANT_INFO", "UNIT_DIED",
+    "ZONE_CHANGE", "COMBATANT_INFO", "UNIT_DIED",
 ))
 
 
@@ -58,7 +58,6 @@ class CombatParser:
 
         # Metadata tracking
         self.current_metadata = RecordingMetadata()
-        self.encounter_deaths = [] 
         self.player_guid = None
         self.player_name = None
         self.player_realm = None
@@ -103,24 +102,16 @@ class CombatParser:
             self._handle_dungeon_start(event)
         elif event.is_dungeon_end:
             self._handle_dungeon_end(event, "dungeon_complete")
+        elif event.is_zone_change:
+            self._handle_zone_change(event)
         elif event.is_encounter_start:
             self._handle_encounter_start(event)
         elif event.is_encounter_end:
             self._handle_encounter_end(event)
 
-        # Track deaths — guard with string check before the heavier parse call.
-        # DeathParser.parse_death_line() does its own "UNIT_DIED" check internally,
-        # but calling the function at all (frame creation, argument passing) on every
-        # line during a pull is measurable overhead.
-        if self.config.TRACK_PLAYER_DEATHS and (self.state.encounter_active or self.state.dungeon_active):
-            if "UNIT_DIED" in line:       
-                death_info = DeathParser.parse_death_line(line)
-                if death_info:
-                    self.encounter_deaths.append({
-                        'timestamp': death_info['timestamp'],
-                        'name': death_info['name'],
-                    })
-                    print(f"{LOG_PREFIXES['PARSER']} 💀 Player death: {death_info['name']}")
+        # Deaths are collected by _scan_log_for_encounter_data() after the
+        # encounter ends — see section 8 of the reference doc. Doing it live
+        # on every UNIT_DIED line is pure overhead on the hot path.
 
         # Grab specID from COMBATANT_INFO once we know the player GUID
         if self.player_guid and self.player_spec_id is None and 'COMBATANT_INFO' in line:
@@ -354,6 +345,10 @@ class CombatParser:
             and event.get_dungeon_end_info()[0]
         )
         timestamp = event.timestamp if event else datetime.now().strftime("%m/%d/%Y %H:%M:%S.0000")
+
+        # Record the log timestamp — the background end thread will use this
+        # as the endpoint for _scan_log_for_encounter_data().
+        self.encounter_end_log_timestamp = timestamp
  
         dungeon_info = DungeonInfo(
             dungeon_id=self.state.dungeon_id or 0,
@@ -376,6 +371,29 @@ class CombatParser:
         self.state.reset()
  
         print(f"{LOG_PREFIXES['PARSER']} Ended M+ dungeon: {dungeon_info.name} ({reason})")
+
+    def _handle_zone_change(self, event: CombatEvent):
+        """Handle ZONE_CHANGE event during dungeon runs."""
+        # Only process if we're in an active dungeon
+        if not self.state.dungeon_active:
+            return
+
+        print(f"{LOG_PREFIXES['PARSER']} Zone change detected during dungeon run")
+
+        # Check if we changed to a different instance (likely left dungeon)
+        try:
+            # ZONE_CHANGE format: uiMapID, zoneName
+            # If zoneName changes significantly, assume dungeon ended
+            if len(event.fields) >= 3:
+                new_zone = event.fields[2]
+                current_dungeon = self.state.dungeon_name
+
+                # Simple check: if zone doesn't contain dungeon name (case-insensitive)
+                if current_dungeon and current_dungeon.lower() not in new_zone.lower():
+                    print(f"{LOG_PREFIXES['PARSER']} Zone changed from dungeon to: {new_zone}")
+                    self._handle_dungeon_end(event, "zone_change")
+        except (IndexError, ValueError):
+            pass
 
     def _handle_dungeon_timeout(self):
         """Handle dungeon timeout due to inactivity."""
@@ -436,6 +454,10 @@ class CombatParser:
         difficulty_id = self.state.difficulty_id
         encounter_duration = self.state.get_encounter_duration()
         is_kill, _ = event.get_encounter_end_info()
+
+        # Record the log timestamp — the background end thread will use this
+        # as the endpoint for _scan_log_for_encounter_data().
+        self.encounter_end_log_timestamp = event.timestamp
  
         boss_info = BossInfo(
             boss_id=self.state.boss_id or 0,
@@ -722,7 +744,13 @@ class CombatParser:
     def _process_dungeon_end_thread(self, dungeon_info: DungeonInfo, duration: float, reason: str):
         """Thread function for ending dungeon recording."""
         time.sleep(3)   # moved from handler — no longer blocks log tailer
- 
+
+        # Now that the log has had time to flush, scan the window for deaths
+        # and combatant info. This populates self.current_metadata.deaths
+        # before process_dungeon_end writes the JSON sidecar.
+        if self.config.GENERATE_METADATA_JSON or self.config.FILE_NAMING_SCHEME == 'wcr':
+            self._scan_log_for_encounter_data()
+
         result = self.processor.process_dungeon_end(
             dungeon_info,
             duration,
@@ -749,7 +777,13 @@ class CombatParser:
     def _process_encounter_end_thread(self, boss_info: BossInfo, duration: float):
         """Thread function for ending encounter recording."""
         time.sleep(3)   # moved from handler — no longer blocks log tailer
- 
+
+        # Now that the log has had time to flush, scan the window for deaths
+        # and combatant info. This populates self.current_metadata.deaths
+        # before process_encounter_end writes the JSON sidecar.
+        if self.config.GENERATE_METADATA_JSON or self.config.FILE_NAMING_SCHEME == 'wcr':
+            self._scan_log_for_encounter_data()
+
         result = self.processor.process_encounter_end(
             boss_info,
             duration,

@@ -41,6 +41,7 @@ from cloud_integration import (
     should_auto_upload,
 )
 from cloud_upload import UploadProgress
+from retention import apply_retention
 
 
 # -----------------------------------------------------------------------------
@@ -171,6 +172,8 @@ def get_config():
             'generate_metadata_json': cm.GENERATE_METADATA_JSON,
             'track_player_deaths': cm.TRACK_PLAYER_DEATHS,
             'organize_by_date': cm.ORGANIZE_BY_DATE,
+            'retention_max_age_days': cm.RETENTION_MAX_AGE_DAYS,
+            'retention_max_per_group': cm.RETENTION_MAX_PER_GROUP,
         },
         'difficulties': {
             'record_lfr': cm.RECORD_LFR,
@@ -289,6 +292,55 @@ def get_recording_metadata(filename: str):
         print(f"[RECORDINGS] Error reading metadata for {filename}: {e}")
         return jsonify({'error': str(e)}), 500
 
+
+@app.route('/api/recordings/<path:filename>/clip', methods=['POST'])
+def create_clip(filename: str):
+    """Export a clip [start, end] seconds from a recording using ffmpeg."""
+    from clip_export import export_clip, ClipError, ffmpeg_available
+
+    record_dir = get_recording_directory()
+    if not record_dir:
+        return jsonify({'error': 'Recording directory not available'}), 500
+
+    try:
+        source_path = _resolve_recording_path(record_dir, filename)
+    except _PathTraversalError:
+        return jsonify({'error': 'Invalid path'}), 403
+
+    if not source_path.exists() or not source_path.is_file():
+        return jsonify({'error': 'File not found'}), 404
+
+    if not ffmpeg_available():
+        return jsonify({'error': 'ffmpeg is not installed on the server'}), 503
+
+    payload = request.get_json(silent=True) or {}
+    try:
+        start = float(payload.get('start', 0))
+        end = float(payload.get('end', 0))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'start and end must be numbers'}), 400
+
+    # Run ffmpeg in a background thread so the request doesn't block;
+    # emit a socket event when done so the recordings list refreshes.
+    def _worker():
+        try:
+            result = export_clip(source_path, start, end)
+            print(f"[CLIP] Created: {result.output_path.name}")
+            socketio.emit('recordings_updated')
+            socketio.emit('clip_complete', {
+                'source': filename,
+                'output': result.output_path.name,
+                'duration': round(result.duration_seconds, 1),
+            })
+        except ClipError as e:
+            print(f"[CLIP] Failed: {e}")
+            socketio.emit('clip_complete', {
+                'source': filename,
+                'error': str(e),
+            })
+
+    threading.Thread(target=_worker, daemon=True).start()
+    return jsonify({'success': True, 'message': 'Clip export started'})
 
 @app.route('/api/cloud/upload/<path:filename>', methods=['POST'])
 def queue_cloud_upload(filename: str):
@@ -611,10 +663,39 @@ def handle_combat_event(event: dict):
     socketio.emit('combat_event', event)
 
 
+def _run_retention_sweep():
+    """Run the retention policy if either rule is configured. Safe to call
+    at any time — no-ops when both rules are 0."""
+    s = get_state()
+    if not s.config_manager:
+        return
+    max_age = s.config_manager.RETENTION_MAX_AGE_DAYS
+    max_per = s.config_manager.RETENTION_MAX_PER_GROUP
+    if max_age <= 0 and max_per <= 0:
+        return
+    record_dir = get_recording_directory()
+    if not record_dir:
+        return
+    if not (s.combat_parser and s.combat_parser.file_manager):
+        return
+    try:
+        apply_retention(
+            record_dir=record_dir,
+            file_manager=s.combat_parser.file_manager,
+            max_age_days=max_age,
+            max_per_group=max_per,
+        )
+    except Exception as e:
+        print(f"[Retention] Error during sweep: {e}")
+
+
 def handle_recording_saved(recording_info: dict = None):
     """Handle recording saved event — notify clients and trigger cloud upload."""
     s = get_state()
     socketio.emit('recordings_updated')
+
+    # Retention sweeps after every save. Cheap when disabled.
+    _run_retention_sweep()
 
     if not (s.cloud_manager and s.cloud_manager.is_ready() and s.combat_parser):
         return
@@ -748,6 +829,9 @@ def init_recorder(config_path: Path) -> bool:
             print(f"")
 
         asyncio.run(init_cloud_manager())
+
+        # One-off retention sweep on startup (no-op if disabled in config)
+        _run_retention_sweep()
 
         s.recorder_running = True
         return True

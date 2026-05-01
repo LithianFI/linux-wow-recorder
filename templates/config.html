@@ -245,6 +245,26 @@
                         </select>
                         <p class="text-xs text-gray-500 mt-1">Choose how recording files are named</p>
                     </div>
+
+                    <!-- Retention Policy -->
+                    <div class="pt-4 mt-2 border-t border-gray-700">
+                        <h3 class="text-sm font-semibold text-gray-300 mb-1">Retention</h3>
+                        <p class="text-xs text-gray-500 mb-4">Automatically delete old recordings. Exported clips are never affected. Use 0 to disable a rule.</p>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-300 mb-1">Max Age (days)</label>
+                                <input type="number" x-model.number="config.recording.retention_max_age_days" min="0"
+                                    class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent">
+                                <p class="text-xs text-gray-500 mt-1">Delete recordings older than this many days</p>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-300 mb-1">Max per Boss/Difficulty</label>
+                                <input type="number" x-model.number="config.recording.retention_max_per_group" min="0"
+                                    class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent">
+                                <p class="text-xs text-gray-500 mt-1">Keep at most N recordings per encounter &amp; difficulty</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </section>
 
@@ -505,6 +525,8 @@
                         generate_metadata_json: false,
                         track_player_deaths: false,
                         organize_by_date: false,
+                        retention_max_age_days: 0,
+                        retention_max_per_group: 0,
                     },
                     difficulties: {
                         record_lfr: false,
@@ -556,6 +578,8 @@
                             generate_metadata_json: data.recording?.generate_metadata_json === true,
                             track_player_deaths: data.recording?.track_player_deaths === true,
                             organize_by_date: data.recording?.organize_by_date === true,
+                            retention_max_age_days: data.recording?.retention_max_age_days ?? 0,
+                            retention_max_per_group: data.recording?.retention_max_per_group ?? 0,
                         };
                         this.config.difficulties = {
                             record_lfr: data.difficulties?.record_lfr === true,

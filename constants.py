@@ -119,41 +119,6 @@ RECORDING_STATUS = {
 }
 
 # ============================================================================
-# DEFAULT CONFIGURATION VALUES (used by ConfigManager)
-# ============================================================================
-
-# Note: Paths will be filled dynamically in ConfigManager
-DEFAULT_CONFIG_VALUES = {
-    'General': {
-        'log_dir': '',  # Will be set dynamically based on OS
-        'log_pattern': DEFAULT_LOG_PATTERN,
-        'recording_extension': DEFAULT_RECORDING_EXTENSION,
-    },
-    'OBS': {
-        'host': DEFAULT_OBS_HOST,
-        'port': str(DEFAULT_OBS_PORT),
-        'password': '',
-    },
-    'Recording': {
-        'auto_rename': 'true',
-        'rename_delay': str(DEFAULT_RENAME_DELAY),
-        'max_rename_attempts': str(DEFAULT_MAX_RENAME_ATTEMPTS),
-        'min_recording_duration': str(DEFAULT_MIN_RECORDING_DURATION),
-        'delete_short_recordings': 'true',
-        'dungeon_timeout_seconds': str(DEFAULT_DUNGEON_TIMEOUT),
-    },
-    'Difficulties': {
-        'record_lfr': 'false',
-        'record_normal': 'true',
-        'record_heroic': 'true',
-        'record_mythic': 'true',
-        'record_other': 'false',
-        'record_mplus': 'true',
-    },
-    'BossNames': {},  # Empty by default
-}
-
-# ============================================================================
 # ERROR MESSAGES (for consistent error handling)
 # ============================================================================
 

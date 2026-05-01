@@ -223,7 +223,7 @@ def main():
             #     print(f"{LOG_PREFIXES['STATUS']} Monitoring: {status['is_monitoring']}, "
             #           f"Tailing: {status['is_tailing']}")
             
-    except Exception:
+    except KeyboardInterrupt:
         print(f"\n\n{LOG_PREFIXES['RECORDER']} 🛑 Shutdown requested...")
     finally:
         # Clean shutdown
