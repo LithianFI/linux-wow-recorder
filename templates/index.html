@@ -5,73 +5,211 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WoW Recorder</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        ink: {
+                            900: '#0d0a07',
+                            800: '#13100c',
+                            700: '#1a1610',
+                            600: '#1d1812',
+                            500: '#2a241c',
+                            400: '#3a3328',
+                        },
+                        parchment: {
+                            900: '#f0e6cd',
+                            700: '#d4ccb6',
+                            500: '#a89c82',
+                            400: '#8a8270',
+                            300: '#6e6552',
+                        },
+                        gold: {
+                            500: '#c9a961',
+                            400: '#d6b975',
+                            600: '#a88a45',
+                        },
+                        diff: {
+                            mythic: '#ff8c1a',
+                            heroic: '#73adff',
+                            normal: '#87cf63',
+                            lfr: '#a89c82',
+                        },
+                    },
+                    fontFamily: {
+                        display: ['"IM Fell English"', 'Georgia', 'serif'],
+                        sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+                        mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+                    },
+                },
+            },
+        };
+    </script>
     <style>
-        [x-cloak] {
-            display: none !important;
+        [x-cloak] { display: none !important; }
+
+        body {
+            background: #13100c;
+            color: #e8e1d0;
         }
 
         @keyframes pulse-recording {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
+            0% { box-shadow: 0 0 0 0 rgba(232,69,69,0.55); }
+            70% { box-shadow: 0 0 0 8px rgba(232,69,69,0); }
+            100% { box-shadow: 0 0 0 0 rgba(232,69,69,0); }
         }
-
-        .animate-pulse-recording {
-            animation: pulse-recording 1s ease-in-out infinite;
-        }
+        .pulse-rec { animation: pulse-recording 1.4s ease-in-out infinite; }
 
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: rgb(55 65 81); border-radius: 3px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgb(107 114 128); border-radius: 3px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgb(156 163 175); }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #1d1812; border-radius: 3px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #3a3328; border-radius: 3px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #5a4f3e; }
+
+        .card {
+            background: #1a1610;
+            border: 1px solid #2a241c;
+            border-radius: 6px;
+            padding: 14px 16px;
+        }
+        .card-accent {
+            background: #1a1610;
+            border: 1px solid #2a241c;
+            border-left: 3px solid #c9a961;
+            border-radius: 0 6px 6px 0;
+            padding: 14px 16px;
+        }
+        .pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+            padding: 4px 10px;
+            border-radius: 999px;
+            background: #1d1812;
+            border: 1px solid #2a241c;
+            color: #a89c82;
+        }
+        .label-cap {
+            font-size: 10px;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            color: #6e6552;
+        }
+        .section-title {
+            font-family: 'IM Fell English', Georgia, serif;
+            font-size: 13px;
+            font-weight: 500;
+            color: #c9a961;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+        }
+        .diff-badge {
+            display: inline-block;
+            font-size: 10px;
+            letter-spacing: 1.5px;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-weight: 500;
+            border: 1px solid;
+        }
+        .diff-mythic { background: rgba(255,128,0,0.14); color: #ff8c1a; border-color: rgba(255,128,0,0.35); }
+        .diff-heroic { background: rgba(115,173,255,0.12); color: #73adff; border-color: rgba(115,173,255,0.32); }
+        .diff-normal { background: rgba(135,207,99,0.12); color: #87cf63; border-color: rgba(135,207,99,0.30); }
+        .diff-lfr    { background: rgba(168,156,130,0.12); color: #a89c82; border-color: rgba(168,156,130,0.30); }
+        .diff-mplus  { background: rgba(255,128,0,0.16); color: #ff9a3a; border-color: rgba(255,128,0,0.40); }
+
+        .tag { font-size: 10px; letter-spacing: 1px; padding: 2px 6px; border-radius: 3px; }
+        .tag-kill  { background: rgba(112,194,89,0.14); color: #8fd06b; }
+        .tag-wipe  { background: rgba(220,80,80,0.14); color: #e07070; }
+        .tag-timed { background: rgba(255,128,0,0.14); color: #ff9a3a; }
+
+        /* Class colors — official WoW palette */
+        .c-deathknight { color: #c41e3a; }
+        .c-demonhunter { color: #a330c9; }
+        .c-druid       { color: #ff7d0a; }
+        .c-evoker      { color: #33937f; }
+        .c-hunter      { color: #abd473; }
+        .c-mage        { color: #69ccf0; }
+        .c-monk        { color: #00ff96; }
+        .c-paladin     { color: #f58cba; }
+        .c-priest      { color: #ffffff; }
+        .c-rogue       { color: #fff569; }
+        .c-shaman      { color: #0070de; }
+        .c-warlock     { color: #9482c9; }
+        .c-warrior     { color: #c79c6e; }
+
+        .quick-btn {
+            padding: 6px 10px;
+            font-size: 11px;
+            background: #1d1812;
+            border: 1px solid #2a241c;
+            border-radius: 4px;
+            color: #a89c82;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .quick-btn:hover {
+            background: #2a241c;
+            color: #d4ccb6;
+            border-color: #3a3328;
+        }
+        .quick-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        h1, h2, h3, h4 { font-family: 'IM Fell English', Georgia, serif; font-weight: 500; }
     </style>
 </head>
 
-<body class="bg-gray-900 text-gray-100 min-h-screen">
-    <div x-data="dashboard()" class="container mx-auto px-4 py-8 max-w-4xl">
-        <header class="mb-8 flex items-center justify-between">
+<body class="min-h-screen">
+    <div x-data="dashboard()" class="container mx-auto px-4 py-8 max-w-5xl">
+
+        <!-- Header -->
+        <header class="mb-6 flex items-start justify-between">
             <div>
-                <h1 class="text-3xl font-bold text-amber-500">WoW Recorder</h1>
-                <p class="text-gray-400 mt-1">Dashboard</p>
+                <h1 class="text-3xl font-display text-gold-500 tracking-wide">WoW Recorder</h1>
+                <p class="text-parchment-400 text-xs tracking-widest mt-1">⸻ keeper of pulls ⸻</p>
             </div>
-            <a href="/config" class="p-2 text-gray-400 hover:text-amber-500 transition-colors" title="Settings">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z">
-                    </path>
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                </svg>
-            </a>
+            <div class="flex items-center gap-2">
+                <span class="pill" x-show="connected">
+                    <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>Server
+                </span>
+                <span class="pill" x-show="!connected" x-cloak>
+                    <span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>Server offline
+                </span>
+                <span class="pill" x-show="status.obs_connected">
+                    <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>OBS
+                </span>
+                <span class="pill cursor-pointer" x-show="status.obs_connected === false" x-cloak
+                    @click="reconnectOBS()" :class="obsReconnecting ? 'opacity-60' : ''">
+                    <span class="w-1.5 h-1.5 rounded-full bg-yellow-500"></span>
+                    <span x-text="obsReconnecting ? 'OBS connecting…' : 'OBS · reconnect'"></span>
+                </span>
+                <span class="pill" x-show="status.log_monitor?.is_monitoring">
+                    <span class="w-1.5 h-1.5 rounded-full"
+                        :class="status.log_monitor?.is_tailing ? 'bg-green-500' : 'bg-yellow-500'"></span>
+                    Combat log
+                </span>
+                <a href="/config" class="ml-1 w-8 h-8 inline-flex items-center justify-center rounded
+                    border border-ink-500 bg-ink-600 text-parchment-400 hover:text-gold-500 transition-colors"
+                    title="Settings">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.6">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                            d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                    </svg>
+                </a>
+            </div>
         </header>
-
-        <!-- Status bar -->
-        <div class="mb-6 flex items-center gap-4 text-sm flex-wrap">
-            <!-- Server connection -->
-            <div class="flex items-center gap-2" x-show="connected">
-                <span class="w-2 h-2 rounded-full bg-green-500"></span>
-                <span class="text-gray-400">Server Connected</span>
-            </div>
-            <div class="flex items-center gap-2" x-show="!connected">
-                <span class="w-2 h-2 rounded-full bg-red-500"></span>
-                <span class="text-red-400">Server Disconnected</span>
-            </div>
-
-            <!-- OBS connection with reconnect button -->
-            <div class="flex items-center gap-2" x-show="status.obs_connected !== undefined">
-                <span class="w-2 h-2 rounded-full"
-                    :class="status.obs_connected ? 'bg-green-500' : 'bg-yellow-500'"></span>
-                <span class="text-gray-400" x-text="status.obs_connected ? 'OBS Connected' : 'OBS Disconnected'"></span>
-                <button x-show="!status.obs_connected" x-cloak
-                    @click="reconnectOBS()"
-                    :disabled="obsReconnecting"
-                    class="text-xs px-2 py-0.5 rounded bg-yellow-600/20 text-yellow-400 border border-yellow-600/40 hover:bg-yellow-600/30 transition-colors disabled:opacity-50">
-                    <span x-text="obsReconnecting ? 'Connecting…' : 'Reconnect'"></span>
-                </button>
-            </div>
-        </div>
 
         <!-- Recorder not running warning -->
         <div x-show="status.recorder_running === false && connected" x-cloak
@@ -86,352 +224,389 @@
             </div>
         </div>
 
-        <!-- Recording status card -->
-        <section class="bg-gray-800 rounded-lg p-4 mb-6">
+        <!-- ═══════════════════════════════════════════════════════
+             COMPACT LIVE STATUS STRIP
+             ═══════════════════════════════════════════════════════ -->
 
-            <!-- Idle -->
-            <div x-show="!status.recorder?.recording && !status.recorder?.encounter_active && !status.recorder?.dungeon_active"
-                class="flex items-center gap-4">
-                <div class="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center shrink-0">
-                    <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"></path>
-                    </svg>
-                </div>
-                <div>
-                    <p class="text-gray-400">Waiting for encounter...</p>
-                    <p class="text-gray-500 text-sm">Recording starts automatically on boss pull</p>
+        <!-- Idle -->
+        <div x-show="!status.recorder?.recording && !status.recorder?.encounter_active && !status.recorder?.dungeon_active"
+            class="mb-5 flex items-center gap-4 px-4 py-3 card">
+            <div class="w-2.5 h-2.5 rounded-full bg-ink-400"></div>
+            <div>
+                <span class="text-parchment-500 text-sm">Waiting for encounter</span>
+                <span class="text-parchment-300 text-xs ml-3">Recording starts automatically on boss pull</span>
+            </div>
+            <button @click="manualRecordingAction()"
+                class="ml-auto quick-btn flex items-center gap-2">
+                <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><circle cx="10" cy="10" r="6"/></svg>
+                Manual recording
+            </button>
+        </div>
+
+        <!-- Active boss recording -->
+        <div x-show="status.recorder?.recording && !status.recorder?.dungeon_active" x-cloak
+            class="mb-5 flex items-center gap-4 px-4 py-3"
+            style="background: linear-gradient(180deg, rgba(232,69,69,0.10) 0%, rgba(232,69,69,0) 100%), #1a1208;
+                   border: 1px solid #3a1a14; border-left: 3px solid #c93939;
+                   border-radius: 0 6px 6px 0;">
+            <div class="w-2.5 h-2.5 rounded-full bg-red-500 pulse-rec shrink-0"></div>
+            <span class="font-display text-xs tracking-[0.25em] text-red-400">REC</span>
+            <span class="font-mono text-2xl text-parchment-900" x-text="formatDuration(liveRecordingDuration)"></span>
+            <div class="w-px h-6 bg-ink-500 mx-1"></div>
+            <div class="min-w-0 flex-1">
+                <div class="font-display text-base text-parchment-900 truncate"
+                    x-text="status.recorder?.boss_name || 'Unknown Boss'"></div>
+                <div class="flex items-center gap-2 mt-0.5">
+                    <span class="diff-badge"
+                        :class="diffClass(status.recorder?.difficulty_id)"
+                        x-text="getDifficultyName(status.recorder?.difficulty_id) || '—'"></span>
+                    <span class="text-parchment-400 text-xs">attempt #<span x-text="bossAttemptCount"></span></span>
+                    <template x-if="status.recorder?.manual_recording">
+                        <span class="text-xs px-1.5 py-0.5 rounded bg-ink-600 text-parchment-400">manual</span>
+                    </template>
                 </div>
             </div>
-
-            <!-- Active boss recording -->
-            <div x-show="status.recorder?.recording && !status.recorder?.dungeon_active" x-cloak
-                class="flex items-center gap-4">
-                <div class="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center shrink-0 animate-pulse-recording">
-                    <div class="w-6 h-6 rounded-full bg-red-500 flex items-center justify-center">
-                        <div class="w-2 h-2 rounded-full bg-white"></div>
-                    </div>
-                </div>
-                <div class="flex-1 min-w-0">
-                    <div class="flex items-center gap-3">
-                        <span class="text-red-400 font-bold">REC</span>
-                        <span class="text-xl font-mono text-white" x-text="formatDuration(liveRecordingDuration)"></span>
-                    </div>
-                    <p class="text-sm truncate">
-                        <span class="text-amber-400" x-text="status.recorder?.boss_name || 'Unknown Boss'"></span>
-                        <span class="text-gray-500 mx-1">•</span>
-                        <span class="text-gray-400" x-text="getDifficultyName(status.recorder?.difficulty_id)"></span>
-                        <template x-if="status.recorder?.manual_recording">
-                            <span class="ml-2 text-xs px-1.5 py-0.5 rounded bg-gray-700 text-gray-400">manual</span>
-                        </template>
-                    </p>
-                </div>
-            </div>
-
-            <!-- Encounter active but not yet recording (difficulty filtered or OBS delay) -->
-            <div x-show="status.recorder?.encounter_active && !status.recorder?.recording && !status.recorder?.dungeon_active" x-cloak
-                class="flex items-center gap-4">
-                <div class="w-10 h-10 rounded-full bg-yellow-500/20 flex items-center justify-center shrink-0">
-                    <svg class="w-5 h-5 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                    </svg>
-                </div>
-                <div>
-                    <p class="text-yellow-400">Encounter in progress <span class="text-gray-500">(not recording)</span></p>
-                    <p class="text-sm text-amber-400" x-text="status.recorder?.boss_name"></p>
-                </div>
-            </div>
-
-            <!-- M+ dungeon active -->
-            <div x-show="status.recorder?.dungeon_active" x-cloak class="flex items-center gap-4">
-                <div class="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center shrink-0 animate-pulse-recording">
-                    <div class="w-6 h-6 rounded-full bg-purple-500 flex items-center justify-center">
-                        <svg class="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd"
-                                d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z"
-                                clip-rule="evenodd" />
-                        </svg>
-                    </div>
-                </div>
-                <div class="flex-1 min-w-0">
-                    <div class="flex items-center gap-3">
-                        <span class="text-purple-400 font-bold">M+</span>
-                        <span class="text-xl font-mono text-white" x-text="formatDuration(liveRecordingDuration)"></span>
-                    </div>
-                    <p class="text-sm truncate">
-                        <span class="text-purple-300" x-text="status.recorder?.dungeon_name || 'Unknown Dungeon'"></span>
-                        <span class="text-gray-500 mx-1">•</span>
-                        <span class="text-amber-400">+<span x-text="status.recorder?.dungeon_level || '?'"></span></span>
-                        <template x-if="status.recorder?.recording">
-                            <span class="ml-2 text-xs text-red-400">● recording</span>
-                        </template>
-                    </p>
-                </div>
-            </div>
-
-            <!-- Manual record / stop button -->
-            <div class="mt-4 pt-4 border-t border-gray-700">
-                <button x-show="!status.recorder?.recording" @click="manualRecordingAction()"
-                    class="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-gray-700 hover:bg-red-600 text-gray-300 hover:text-white">
-                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                        <circle cx="10" cy="10" r="6" />
-                    </svg>
-                    Start Manual Recording
-                </button>
-
-                <button x-show="status.recorder?.recording" x-cloak @click="manualRecordingAction()"
-                    :disabled="!status.recorder?.manual_recording"
-                    :title="!status.recorder?.manual_recording ? 'Recording is managed automatically' : 'Stop the active recording'"
-                    :class="status.recorder?.manual_recording
-                        ? 'bg-red-600 hover:bg-red-700 text-white cursor-pointer'
-                        : 'bg-gray-700 text-gray-500 cursor-not-allowed opacity-60'"
-                    class="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                        <rect x="5" y="5" width="10" height="10" rx="1" />
-                    </svg>
-                    Stop Recording
-                </button>
-            </div>
-        </section>
-
-        <!-- Combat Log status -->
-        <section class="bg-gray-800 rounded-lg p-6">
-            <h2 class="text-lg font-semibold text-gray-300 mb-4 flex items-center gap-2">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
-                    </path>
+            <button @click="markMoment()"
+                class="quick-btn flex items-center gap-1.5"
+                :title="momentJustMarked ? 'Marked!' : 'Flag this moment for the post-pull review'"
+                :class="momentJustMarked ? 'border-gold-500 text-gold-400' : ''">
+                <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M3 2a1 1 0 011-1h12a1 1 0 01.78 1.625L13.28 6l3.5 3.375A1 1 0 0116 11H5v8a1 1 0 11-2 0V2z"/>
                 </svg>
-                Combat Log
-            </h2>
+                <span x-text="momentJustMarked ? 'Marked' : 'Mark moment'"></span>
+                <span x-show="liveMoments.length > 0" class="text-gold-500 ml-1"
+                    x-text="'(' + liveMoments.length + ')'"></span>
+            </button>
+            <button x-show="status.recorder?.manual_recording" @click="manualRecordingAction()"
+                class="quick-btn flex items-center gap-1.5"
+                style="color:#e07070; border-color: rgba(224,112,112,0.4);">
+                <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><rect x="5" y="5" width="10" height="10" rx="1"/></svg>
+                Stop
+            </button>
+        </div>
 
-            <div class="space-y-4">
-                <div class="flex items-center justify-between">
-                    <span class="text-gray-400">Monitoring</span>
-                    <div class="flex items-center gap-2">
-                        <span class="w-2 h-2 rounded-full"
-                            :class="status.log_monitor?.is_monitoring ? 'bg-green-500' : 'bg-red-500'"></span>
-                        <span x-text="status.log_monitor?.is_monitoring ? 'Active' : 'Inactive'"></span>
-                    </div>
-                </div>
+        <!-- Encounter active but not yet recording -->
+        <div x-show="status.recorder?.encounter_active && !status.recorder?.recording && !status.recorder?.dungeon_active"
+            x-cloak class="mb-5 flex items-center gap-4 px-4 py-3"
+            style="background: linear-gradient(180deg, rgba(255,154,58,0.08) 0%, rgba(255,154,58,0) 100%), #1a1610;
+                   border: 1px solid #3a2818; border-left: 3px solid #ff9a3a;
+                   border-radius: 0 6px 6px 0;">
+            <svg class="w-5 h-5 text-yellow-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <div class="min-w-0">
+                <div class="text-yellow-400 text-sm">Encounter in progress <span class="text-parchment-400">(not recording)</span></div>
+                <div class="text-parchment-700 text-xs mt-0.5" x-text="status.recorder?.boss_name"></div>
+            </div>
+        </div>
 
-                <div class="flex items-center justify-between">
-                    <span class="text-gray-400">Current Log</span>
-                    <span class="font-mono text-sm truncate max-w-xs"
-                        :class="status.log_monitor?.current_log ? 'text-gray-300' : 'text-gray-500'"
-                        x-text="status.log_monitor?.current_log || 'None'"></span>
-                </div>
-
-                <div class="flex items-center justify-between">
-                    <span class="text-gray-400">Tailing</span>
-                    <div class="flex items-center gap-2">
-                        <span class="w-2 h-2 rounded-full"
-                            :class="status.log_monitor?.is_tailing ? 'bg-green-500' : 'bg-gray-600'"></span>
-                        <span x-text="status.log_monitor?.is_tailing ? 'Active' : 'Idle'"></span>
-                    </div>
+        <!-- M+ dungeon active -->
+        <div x-show="status.recorder?.dungeon_active" x-cloak
+            class="mb-5 flex items-center gap-4 px-4 py-3"
+            style="background: linear-gradient(180deg, rgba(157,157,255,0.10) 0%, rgba(157,157,255,0) 100%), #14111a;
+                   border: 1px solid #2a2440; border-left: 3px solid #9d9dff;
+                   border-radius: 0 6px 6px 0;">
+            <div class="w-2.5 h-2.5 rounded-full pulse-rec shrink-0"
+                style="background:#9d9dff; box-shadow: 0 0 0 0 rgba(157,157,255,0.5);"></div>
+            <span class="font-display text-xs tracking-[0.25em]" style="color:#9d9dff;">M+</span>
+            <span class="font-mono text-2xl text-parchment-900" x-text="formatDuration(liveRecordingDuration)"></span>
+            <div class="w-px h-6 bg-ink-500 mx-1"></div>
+            <div class="min-w-0 flex-1">
+                <div class="font-display text-base text-parchment-900 truncate"
+                    x-text="status.recorder?.dungeon_name || 'Unknown Dungeon'"></div>
+                <div class="flex items-center gap-2 mt-0.5">
+                    <span class="diff-badge diff-mplus">+<span x-text="status.recorder?.dungeon_level || '?'"></span></span>
+                    <template x-if="status.recorder?.recording">
+                        <span class="text-red-400 text-xs">● recording</span>
+                    </template>
                 </div>
             </div>
+            <button @click="markMoment()"
+                class="quick-btn flex items-center gap-1.5"
+                :class="momentJustMarked ? 'border-gold-500 text-gold-400' : ''">
+                <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M3 2a1 1 0 011-1h12a1 1 0 01.78 1.625L13.28 6l3.5 3.375A1 1 0 0116 11H5v8a1 1 0 11-2 0V2z"/>
+                </svg>
+                <span x-text="momentJustMarked ? 'Marked' : 'Mark moment'"></span>
+            </button>
+        </div>
 
-            <!-- Event log -->
-            <div class="mt-6">
-                <div class="flex items-center justify-between mb-3">
-                    <h3 class="text-sm font-medium text-gray-400">Event Log</h3>
+        <!-- ═══════════════════════════════════════════════════════
+             HERO: PREVIOUS PULL
+             ═══════════════════════════════════════════════════════ -->
+        <section x-show="lastPull" x-cloak class="mb-5">
+            <div class="card-accent p-0 overflow-hidden"
+                :style="lastPull?.is_kill
+                    ? 'border-left-color:#8fd06b;'
+                    : 'border-left-color:#e07070;'">
+                <div class="px-4 pt-4 pb-3 flex items-center justify-between">
                     <div class="flex items-center gap-3">
-                        <!-- Filter buttons -->
-                        <div class="flex gap-1">
-                            <button @click="eventFilter = ''"
-                                :class="eventFilter === '' ? 'bg-amber-500/20 text-amber-400 border-amber-500/40' : 'bg-gray-700 text-gray-400 border-gray-600'"
-                                class="text-xs px-2 py-0.5 rounded border transition-colors">All</button>
-                            <button @click="eventFilter = 'ENCOUNTER'"
-                                :class="eventFilter === 'ENCOUNTER' ? 'bg-amber-500/20 text-amber-400 border-amber-500/40' : 'bg-gray-700 text-gray-400 border-gray-600'"
-                                class="text-xs px-2 py-0.5 rounded border transition-colors">Boss</button>
-                            <button @click="eventFilter = 'CHALLENGE'"
-                                :class="eventFilter === 'CHALLENGE' ? 'bg-purple-500/20 text-purple-400 border-purple-500/40' : 'bg-gray-700 text-gray-400 border-gray-600'"
-                                class="text-xs px-2 py-0.5 rounded border transition-colors">M+</button>
-                            <button @click="eventFilter = 'MANUAL'"
-                                :class="eventFilter === 'MANUAL' ? 'bg-blue-500/20 text-blue-400 border-blue-500/40' : 'bg-gray-700 text-gray-400 border-gray-600'"
-                                class="text-xs px-2 py-0.5 rounded border transition-colors">Manual</button>
-                        </div>
-                        <!-- Auto-scroll toggle -->
-                        <button @click="autoScroll = !autoScroll"
-                            :class="autoScroll ? 'text-green-400' : 'text-gray-500'"
-                            class="text-xs flex items-center gap-1 transition-colors" title="Toggle auto-scroll">
-                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M19 13l-7 7-7-7m14-8l-7 7-7-7" />
-                            </svg>
-                            <span x-text="autoScroll ? 'Auto' : 'Paused'"></span>
-                        </button>
+                        <h3 class="section-title"
+                            :style="lastPull?.is_kill ? 'color:#8fd06b;' : 'color:#e07070;'">
+                            Previous pull
+                        </h3>
+                        <span class="text-parchment-400 text-xs"
+                            x-text="lastPullSubtitle"></span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="tag"
+                            :class="lastPull?.is_kill ? 'tag-kill' : 'tag-wipe'"
+                            x-text="lastPullResultLabel"></span>
+                        <span class="diff-badge" :class="diffClass(lastPullDifficultyId)"
+                            x-text="lastPullDifficultyShort"></span>
                     </div>
                 </div>
 
-                <div class="bg-gray-900/50 rounded-lg overflow-hidden">
-                    <template x-if="filteredEvents.length === 0">
-                        <p class="text-center text-gray-500 py-6 text-sm">No events yet</p>
-                    </template>
-                    <template x-if="filteredEvents.length > 0">
-                        <div class="overflow-y-auto max-h-64 custom-scrollbar" x-ref="eventLogContainer">
-                            <table class="w-full text-sm">
-                                <template x-for="(event, idx) in filteredEvents" :key="idx">
-                                    <tr class="border-b border-gray-800/60 last:border-0 hover:bg-gray-800/30">
-                                        <td class="py-2 pl-3 w-28">
-                                            <span class="text-xs font-medium px-1.5 py-0.5 rounded"
-                                                :class="{
-                                                    'bg-red-900/40 text-red-400': event.type === 'ENCOUNTER_END' && !event.is_kill,
-                                                    'bg-green-900/40 text-green-400': event.type === 'ENCOUNTER_END' && event.is_kill,
-                                                    'bg-blue-900/40 text-blue-400': event.type === 'MANUAL',
-                                                    'bg-amber-900/40 text-amber-400': event.type === 'ENCOUNTER_START',
-                                                    'bg-purple-900/40 text-purple-400': event.type === 'CHALLENGE_MODE_START' || event.type === 'CHALLENGE_MODE_END',
-                                                    'bg-gray-700 text-gray-400': !['ENCOUNTER_END','ENCOUNTER_START','MANUAL','CHALLENGE_MODE_START','CHALLENGE_MODE_END'].includes(event.type)
-                                                }"
-                                                x-text="event.type === 'MANUAL' ? 'MANUAL'
-                                                    : event.type === 'ENCOUNTER_END' ? (event.is_kill ? 'KILL' : 'WIPE')
-                                                    : event.type === 'ENCOUNTER_START' ? 'PULL'
-                                                    : event.type === 'CHALLENGE_MODE_START' ? 'M+ START'
-                                                    : event.type === 'CHALLENGE_MODE_END' ? 'M+ END'
-                                                    : event.type">
-                                            </span>
-                                        </td>
-                                        <td class="py-2 pr-4 text-gray-500 w-20" x-text="formatEventTime(event.timestamp)"></td>
-                                        <td class="py-2 text-gray-300" x-text="event.boss_name || event.dungeon_name || ''"></td>
-                                        <td class="py-2 pl-4 pr-3 text-right text-gray-400 w-24"
-                                            x-text="(event.type === 'ENCOUNTER_END' || event.type === 'CHALLENGE_MODE_END') && event.duration ? formatDuration(event.duration) : ''">
-                                        </td>
-                                    </tr>
-                                </template>
-                            </table>
-                        </div>
-                    </template>
-                </div>
-            </div>
-        </section>
-
-        <!-- Recent Recordings -->
-        <section class="bg-gray-800 rounded-lg p-6 mt-6">
-            <div class="flex items-center justify-between mb-4">
-                <h2 class="text-lg font-semibold text-gray-300 flex items-center gap-2">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z">
-                        </path>
-                    </svg>
-                    Recent Recordings
-                </h2>
-                <a href="/recordings" class="text-sm text-gray-400 hover:text-amber-400 transition-colors">
-                    View All
-                </a>
-            </div>
-
-            <div x-show="recordings.length === 0" class="text-center py-6">
-                <p class="text-gray-500">No recordings found</p>
-            </div>
-
-            <div x-show="recordings.length > 0" class="space-y-2">
-                <template x-for="(rec, idx) in recordings.slice(0, 4)" :key="rec.name">
-                    <div @click="openPreview(rec)"
-                        class="flex items-center justify-between py-3 px-3 bg-gray-700/30 rounded-lg hover:bg-gray-700/50 transition-colors cursor-pointer">
-                        <div class="flex items-center gap-3 min-w-0 flex-1">
-                            <svg class="w-8 h-8 shrink-0 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z">
-                                </path>
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                            </svg>
-                            <div class="min-w-0">
-                                <p class="text-gray-200 truncate text-sm" x-text="rec.name"></p>
-                                <p class="text-gray-500 text-xs mt-0.5">
-                                    <span x-text="formatFileSize(rec.size)"></span>
-                                    <span class="mx-1">·</span>
-                                    <span x-text="formatDate(rec.modified)"></span>
-                                </p>
+                <div class="grid grid-cols-1 md:grid-cols-5 gap-4 px-4 pb-4">
+                    <!-- Video thumbnail -->
+                    <div class="md:col-span-3">
+                        <div class="relative aspect-video bg-ink-900 rounded overflow-hidden cursor-pointer group"
+                            @click="openPreview(lastPull?.recording)"
+                            style="background: radial-gradient(circle at 30% 40%, rgba(80,40,30,0.4), transparent 50%),
+                                               radial-gradient(circle at 70% 60%, rgba(120,30,40,0.35), transparent 50%),
+                                               #1a0d08;">
+                            <div class="absolute inset-0 flex items-center justify-center">
+                                <div class="w-12 h-12 rounded-full flex items-center justify-center transition-transform group-hover:scale-110"
+                                    style="background: rgba(201,169,97,0.92); color:#13100c;">
+                                    <svg class="w-5 h-5 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                                </div>
+                            </div>
+                            <div class="absolute bottom-2 left-3 right-3 flex justify-between items-center font-mono text-xs text-parchment-900"
+                                style="text-shadow: 0 1px 2px rgba(0,0,0,0.8);">
+                                <span x-text="formatDuration(lastPull?.duration)"></span>
+                                <span class="truncate ml-2" x-text="formatFileSize(lastPull?.recording?.size || 0)"></span>
                             </div>
                         </div>
-                        <a :href="'/video/' + rec.name.split('/').map(encodeURIComponent).join('/')"
-                            target="_blank"
-                            @click.stop
-                            class="ml-3 shrink-0 p-1.5 text-gray-500 hover:text-amber-400 transition-colors rounded">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14">
-                                </path>
-                            </svg>
-                        </a>
+
+                        <!-- Death timeline -->
+                        <div class="relative mt-2 h-2 bg-ink-600 rounded overflow-hidden">
+                            <template x-for="d in (lastPull?.deaths || [])" :key="d.timestamp">
+                                <div class="absolute top-0 bottom-0 w-0.5 bg-red-500/85"
+                                    :style="'left:' + ((d.timestamp / (lastPull?.duration || 1)) * 100) + '%;'"
+                                    :title="(d.name || 'unknown') + ' @ ' + formatDuration(d.timestamp)"></div>
+                            </template>
+                        </div>
+                        <div class="flex justify-between font-mono text-[10px] text-parchment-300 mt-1">
+                            <span>00:00</span>
+                            <span style="color:#e07070;" x-show="(lastPull?.deaths || []).length > 0">
+                                <span x-text="(lastPull?.deaths || []).length"></span> deaths
+                            </span>
+                            <span x-text="formatDuration(lastPull?.duration)"></span>
+                        </div>
                     </div>
-                </template>
+
+                    <!-- Death roster -->
+                    <div class="md:col-span-2">
+                        <div class="label-cap mb-2">Deaths</div>
+                        <div class="space-y-1 text-xs"
+                            x-show="(lastPull?.deaths || []).length > 0">
+                            <template x-for="(d, i) in (lastPull?.deaths || []).slice(0, 6)" :key="i">
+                                <div class="flex justify-between gap-2">
+                                    <span class="truncate">
+                                        <span :class="classColor(d.specId)"
+                                            x-text="d.name || 'unknown'"></span>
+                                        <span class="text-parchment-300 text-[10px] ml-1"
+                                            x-text="className(d.specId)"></span>
+                                    </span>
+                                    <span class="font-mono text-parchment-400 shrink-0"
+                                        x-text="formatDuration(d.timestamp)"></span>
+                                </div>
+                            </template>
+                            <div class="text-parchment-300 text-[10px] pt-1"
+                                x-show="(lastPull?.deaths || []).length > 6">
+                                +<span x-text="(lastPull?.deaths || []).length - 6"></span> more
+                            </div>
+                        </div>
+                        <div class="text-parchment-300 text-xs italic"
+                            x-show="(lastPull?.deaths || []).length === 0">
+                            No deaths recorded
+                        </div>
+
+                        <div class="mt-3 pt-3 border-t border-ink-500 flex gap-1.5">
+                            <button @click="openPreview(lastPull?.recording)"
+                                class="quick-btn flex-1 flex items-center justify-center gap-1">
+                                <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M6 4l10 6-10 6V4z"/></svg>
+                                Watch
+                            </button>
+                            <button @click="openPreviewToClip(lastPull?.recording)"
+                                class="quick-btn flex-1">✂ Clip</button>
+                            <button @click="uploadToCloud(lastPull?.recording)"
+                                x-show="cloudStatus.enabled"
+                                class="quick-btn flex-1">↗ Cloud</button>
+                        </div>
+                    </div>
+                </div>
             </div>
         </section>
 
-        <!-- Cloud Upload Status (shown only when cloud is enabled) -->
-        <section class="bg-gray-800 rounded-lg p-6 mt-6" x-show="cloudStatus.enabled" x-cloak>
-            <h2 class="text-lg font-semibold text-gray-300 mb-4 flex items-center gap-2">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12">
-                    </path>
-                </svg>
-                Cloud Upload
-                <span class="ml-auto text-xs px-2 py-1 rounded-full"
-                    :class="cloudStatus.authenticated ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'"
-                    x-text="cloudStatus.authenticated ? 'Authenticated' : 'Not authenticated'">
-                </span>
-            </h2>
-
-            <!-- Active upload progress -->
-            <div x-show="cloudStatus.queue?.active_upload" x-cloak class="mb-4">
-                <div class="flex items-center justify-between text-sm mb-1">
-                    <span class="text-gray-400 truncate" x-text="cloudStatus.queue?.active_upload"></span>
-                    <span class="text-gray-400 ml-2 shrink-0" x-text="uploadSpeed"></span>
+        <!-- ═══════════════════════════════════════════════════════
+             TONIGHT'S PROGRESSION
+             ═══════════════════════════════════════════════════════ -->
+        <section x-show="progression.boss && progression.pulls.length > 1" x-cloak class="mb-5">
+            <div class="card">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-3">
+                        <h3 class="section-title">Tonight on <span x-text="progression.boss"></span></h3>
+                    </div>
+                    <span class="text-parchment-400 text-xs">
+                        <span x-text="progression.pulls.length"></span> pulls ·
+                        <span x-text="progression.kills"></span> kills ·
+                        best <span class="font-mono text-parchment-700"
+                            x-text="formatDuration(progression.bestDuration)"></span>
+                    </span>
                 </div>
-                <div class="h-2 bg-gray-700 rounded-full overflow-hidden">
-                    <div class="h-full bg-amber-500 rounded-full transition-all duration-300"
-                        :style="'width:' + (uploadProgress || 0) + '%'"></div>
+                <div class="flex items-end gap-1 h-14">
+                    <template x-for="(p, idx) in progression.pulls" :key="idx">
+                        <div class="flex-1 flex flex-col items-center gap-1 min-w-0 group cursor-pointer"
+                            @click="openPreview(findRecordingByName(p.recording_name))"
+                            :title="(p.is_kill ? 'KILL · ' : 'WIPE · ') + formatDuration(p.duration) + ' · ' + (p.deaths_count || 0) + ' deaths'">
+                            <div class="w-full rounded-t-sm transition-opacity group-hover:opacity-100"
+                                :style="'height:' + progressionBarHeight(p) + '%;'
+                                    + (p.is_kill
+                                        ? 'background: rgba(112,194,89,0.55);'
+                                        : 'background: rgba(220,80,80,' + (0.25 + (idx / progression.pulls.length) * 0.4) + ');')"></div>
+                            <span class="font-mono text-[9px]"
+                                :class="p.is_kill ? 'text-green-400' : (idx === progression.pulls.length - 1 ? 'text-red-400' : 'text-parchment-300')"
+                                x-text="(idx + 1) + (p.is_kill ? '★' : '')"></span>
+                        </div>
+                    </template>
                 </div>
-                <p class="text-xs text-gray-500 mt-1" x-text="(uploadProgress || 0).toFixed(1) + '%'"></p>
-            </div>
-
-            <!-- Stats row -->
-            <div class="grid grid-cols-3 gap-4 text-center">
-                <div>
-                    <div class="text-2xl font-bold text-amber-400" x-text="cloudStatus.queue?.queue_size || 0"></div>
-                    <div class="text-xs text-gray-500">Queued</div>
-                </div>
-                <div>
-                    <div class="text-2xl font-bold text-green-400" x-text="cloudStatus.queue?.completed_count || 0"></div>
-                    <div class="text-xs text-gray-500">Completed</div>
-                </div>
-                <div>
-                    <div class="text-2xl font-bold text-red-400" x-text="cloudStatus.queue?.failed_count || 0"></div>
-                    <div class="text-xs text-gray-500">Failed</div>
+                <div class="flex justify-between text-[10px] text-parchment-300 mt-1">
+                    <span>Bar height = pull duration · taller = longer attempt</span>
+                    <span class="text-gold-500">★ kill</span>
                 </div>
             </div>
+        </section>
 
-            <!-- Provider & storage info -->
-            <div class="mt-4 pt-4 border-t border-gray-700 flex items-center justify-between text-sm">
-                <span class="text-gray-500" x-text="'Provider: ' + (cloudStatus.provider || '—')"></span>
-                <template x-if="cloudStatus.storage?.used_gb !== undefined">
-                    <span class="text-gray-500">
-                        <span x-text="cloudStatus.storage.used_gb.toFixed(1)"></span> /
-                        <span x-text="cloudStatus.storage.total_gb ? cloudStatus.storage.total_gb.toFixed(0) + ' GB' : '—'"></span>
+        <!-- ═══════════════════════════════════════════════════════
+             RECENT RECORDINGS
+             ═══════════════════════════════════════════════════════ -->
+        <section class="mb-5">
+            <div class="card">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="section-title">Recent recordings</h3>
+                    <a href="/recordings" class="text-gold-500 hover:text-gold-400 text-xs transition-colors">
+                        View all <span x-show="recordings.length > 0">(<span x-text="recordings.length"></span>)</span> →
+                    </a>
+                </div>
+
+                <div x-show="recordings.length === 0" class="text-center py-6">
+                    <p class="text-parchment-300 text-sm">No recordings found</p>
+                </div>
+
+                <table x-show="recordings.length > 0" class="w-full text-xs">
+                    <thead>
+                        <tr class="text-left text-parchment-300"
+                            style="font-size:10px; letter-spacing: 1.5px; text-transform: uppercase;">
+                            <th class="px-2 py-1.5 font-medium">Encounter</th>
+                            <th class="px-2 py-1.5 font-medium">Diff</th>
+                            <th class="px-2 py-1.5 font-medium">Result</th>
+                            <th class="px-2 py-1.5 font-medium text-right">Duration</th>
+                            <th class="px-2 py-1.5 font-medium text-right">Size</th>
+                            <th class="px-2 py-1.5 font-medium text-right">When</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="rec in recordings.slice(0, 8)" :key="rec.name">
+                            <tr class="border-t border-ink-500 hover:bg-ink-700/50 cursor-pointer transition-colors"
+                                @click="openPreview(rec)">
+                                <td class="px-2 py-2 text-parchment-700 truncate max-w-xs"
+                                    x-text="parseRecordingName(rec.name).encounter"></td>
+                                <td class="px-2 py-2">
+                                    <span class="diff-badge"
+                                        :class="diffClassFromShort(parseRecordingName(rec.name).difficulty)"
+                                        x-text="parseRecordingName(rec.name).difficulty || '—'"></span>
+                                </td>
+                                <td class="px-2 py-2">
+                                    <span class="tag"
+                                        :class="parseRecordingName(rec.name).result === 'KILL' ? 'tag-kill' : 'tag-wipe'"
+                                        x-text="parseRecordingName(rec.name).result || '—'"></span>
+                                </td>
+                                <td class="px-2 py-2 text-right font-mono text-parchment-700"
+                                    x-text="formatDuration(rec.duration_estimate || 0) || '—'"></td>
+                                <td class="px-2 py-2 text-right text-parchment-400"
+                                    x-text="formatFileSize(rec.size)"></td>
+                                <td class="px-2 py-2 text-right text-parchment-400"
+                                    x-text="formatDate(rec.modified)"></td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- ═══════════════════════════════════════════════════════
+             CLOUD UPLOAD
+             ═══════════════════════════════════════════════════════ -->
+        <section x-show="cloudStatus.enabled" x-cloak class="mb-5">
+            <div class="card">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="section-title">Cloud upload</h3>
+                    <span class="pill"
+                        :style="cloudStatus.authenticated ? '' : 'color:#e07070; border-color:#3a1a14;'">
+                        <span class="w-1.5 h-1.5 rounded-full"
+                            :class="cloudStatus.authenticated ? 'bg-green-500' : 'bg-red-500'"></span>
+                        <span x-text="(cloudStatus.provider || 'cloud') + ' · ' + (cloudStatus.authenticated ? 'authenticated' : 'not authenticated')"></span>
+                    </span>
+                </div>
+
+                <div x-show="cloudStatus.queue?.active_upload" x-cloak class="mb-3">
+                    <div class="flex justify-between text-xs mb-1">
+                        <span class="text-parchment-700 truncate" x-text="cloudStatus.queue?.active_upload"></span>
+                        <span class="text-parchment-400 ml-2 shrink-0 font-mono" x-text="uploadSpeed"></span>
+                    </div>
+                    <div class="h-1.5 bg-ink-600 rounded overflow-hidden border border-ink-500">
+                        <div class="h-full bg-gold-500 transition-all duration-300"
+                            :style="'width:' + (uploadProgress || 0) + '%;'"></div>
+                    </div>
+                    <div class="font-mono text-[10px] text-gold-500 mt-1"
+                        x-text="(uploadProgress || 0).toFixed(1) + '%'"></div>
+                </div>
+
+                <div class="grid grid-cols-3 gap-3">
+                    <div class="text-center p-2 bg-ink-600 rounded">
+                        <div class="font-mono text-xl text-parchment-900"
+                            x-text="cloudStatus.queue?.queue_size || 0"></div>
+                        <div class="label-cap mt-1">Queued</div>
+                    </div>
+                    <div class="text-center p-2 bg-ink-600 rounded">
+                        <div class="font-mono text-xl" style="color:#8fd06b;"
+                            x-text="cloudStatus.queue?.completed_count || 0"></div>
+                        <div class="label-cap mt-1">Completed</div>
+                    </div>
+                    <div class="text-center p-2 bg-ink-600 rounded">
+                        <div class="font-mono text-xl"
+                            :style="(cloudStatus.queue?.failed_count || 0) > 0 ? 'color:#e07070;' : 'color:#a89c82;'"
+                            x-text="cloudStatus.queue?.failed_count || 0"></div>
+                        <div class="label-cap mt-1">Failed</div>
+                    </div>
+                </div>
+
+                <div class="mt-3 pt-3 border-t border-ink-500 flex justify-between text-xs"
+                    x-show="cloudStatus.storage?.used_gb !== undefined">
+                    <span class="text-parchment-400" x-text="'Provider: ' + (cloudStatus.provider || '—')"></span>
+                    <span class="text-parchment-400">
+                        <span class="font-mono" x-text="cloudStatus.storage?.used_gb?.toFixed(1)"></span> /
+                        <span class="font-mono" x-text="cloudStatus.storage?.total_gb ? cloudStatus.storage.total_gb.toFixed(0) + ' GB' : '—'"></span>
                         used
                     </span>
-                </template>
+                </div>
             </div>
         </section>
 
-        <!-- Video preview modal -->
+        <!-- ═══════════════════════════════════════════════════════
+             VIDEO PREVIEW MODAL (kept from original — works as-is)
+             ═══════════════════════════════════════════════════════ -->
         <div x-show="previewRecording" x-cloak
-            class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"
+            class="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
             @click.self="closePreview()"
             @keydown.escape.window="closePreview()">
-            <div class="bg-gray-800 rounded-lg max-w-4xl w-full max-h-[90vh] flex flex-col">
+            <div class="bg-ink-700 rounded-lg max-w-4xl w-full max-h-[90vh] flex flex-col border border-ink-500">
 
-                <div class="flex items-center justify-between p-4 border-b border-gray-700">
-                    <h3 class="text-lg font-semibold text-gray-200 truncate pr-4" x-text="previewRecording?.name"></h3>
-                    <button @click="closePreview()" class="p-1 text-gray-400 hover:text-white transition-colors">
+                <div class="flex items-center justify-between p-4 border-b border-ink-500">
+                    <h3 class="font-display text-lg text-parchment-900 truncate pr-4" x-text="previewRecording?.name"></h3>
+                    <button @click="closePreview()" class="p-1 text-parchment-400 hover:text-parchment-900 transition-colors">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                 d="M6 18L18 6M6 6l12 12"></path>
@@ -440,139 +615,101 @@
                 </div>
 
                 <div class="p-4 flex-1 min-h-0">
-                    <div>
-                        <div class="aspect-video bg-black rounded-t-lg overflow-hidden">
-                            <video x-ref="previewPlayer" class="w-full h-full"
-                                :src="previewRecording ? '/video/' + previewRecording.name.split('/').map(encodeURIComponent).join('/') : ''"
-                                @timeupdate="previewOnTimeUpdate()" @loadedmetadata="previewOnVideoLoaded()"
-                                @ended="previewIsPlaying = false" @pause="previewIsPlaying = false"
-                                @play="previewIsPlaying = true">
-                            </video>
+                    <div class="aspect-video bg-black rounded-t-lg overflow-hidden">
+                        <video x-ref="previewPlayer" class="w-full h-full"
+                            :src="previewRecording ? '/video/' + previewRecording.name.split('/').map(encodeURIComponent).join('/') : ''"
+                            @timeupdate="previewOnTimeUpdate()" @loadedmetadata="previewOnVideoLoaded()"
+                            @ended="previewIsPlaying = false" @pause="previewIsPlaying = false"
+                            @play="previewIsPlaying = true">
+                        </video>
+                    </div>
+
+                    <!-- Timeline with death markers -->
+                    <div class="bg-ink-800 rounded-b-lg p-3">
+                        <div class="relative h-2 bg-ink-600 rounded cursor-pointer mb-3"
+                            x-ref="previewTimeline"
+                            @click="previewSeekTo($event)"
+                            @mousemove="previewHoverSeek($event)"
+                            @mouseleave="previewSeekPreviewTime = null">
+                            <div class="h-full bg-gold-500 rounded transition-all"
+                                :style="'width:' + previewPlayedPercent + '%;'"></div>
+                            <template x-for="(pct, i) in previewDeathMarkerPositions" :key="i">
+                                <div class="absolute top-0 bottom-0 w-0.5 bg-red-500"
+                                    :style="'left:' + pct + '%;'"
+                                    @click.stop="previewSeekToMarker(pct)"></div>
+                            </template>
+                            <template x-for="(pct, i) in previewMomentPositions" :key="'m'+i">
+                                <div class="absolute -top-1 -bottom-1 w-0.5 bg-gold-500"
+                                    :style="'left:' + pct + '%;'"
+                                    @click.stop="previewSeekToMarker(pct)"></div>
+                            </template>
                         </div>
 
-                        <div class="bg-gray-900 rounded-b-lg px-3 pt-2 pb-3 select-none">
-                            <div class="relative h-5 flex items-center mb-2 group cursor-pointer"
-                                @click="previewSeekTo($event)" @mousemove="previewHoverSeek($event)"
-                                @mouseleave="previewSeekPreviewTime = null" x-ref="previewTimeline">
+                        <div class="flex items-center gap-3 text-xs">
+                            <button @click="previewTogglePlay()" class="text-parchment-700 hover:text-parchment-900 transition-colors">
+                                <svg x-show="!previewIsPlaying" class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
+                                </svg>
+                                <svg x-show="previewIsPlaying" class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
+                                </svg>
+                            </button>
 
-                                <div class="absolute inset-x-0 h-1.5 bg-gray-700 rounded-full"></div>
-                                <div class="absolute left-0 h-1.5 bg-amber-500 rounded-full pointer-events-none"
-                                    :style="'width:' + previewPlayedPercent + '%'"></div>
+                            <span class="font-mono text-parchment-400">
+                                <span x-text="previewFormatTime(previewCurrentTime)"></span>
+                                <span class="text-ink-400"> / </span>
+                                <span x-text="previewFormatTime(previewDuration)"></span>
+                            </span>
 
-                                <!-- Clip range highlight (behind death markers, above progress) -->
-                                <template x-if="clipInPercent !== null || clipOutPercent !== null">
-                                    <div class="absolute h-1.5 bg-amber-400/30 border-x-2 border-amber-400 rounded-sm pointer-events-none"
-                                        :style="'left:' + (clipInPercent ?? 0) + '%; width:' + ((clipOutPercent ?? 100) - (clipInPercent ?? 0)) + '%'"></div>
-                                </template>
+                            <div class="flex-1"></div>
 
-                                <template x-for="(pct, i) in previewDeathMarkerPositions" :key="i">
-                                    <div class="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 group/marker"
-                                        :style="'left:' + pct + '%'">
-                                        <div class="w-4 h-4 rounded-full bg-red-600 border-2 border-red-300 flex items-center justify-center shadow-lg opacity-80 group-hover/marker:opacity-100 transition-opacity cursor-pointer"
-                                            @click.stop="previewSeekToMarker(pct)">
-                                            <span class="text-[9px] leading-none">💀</span>
-                                        </div>
-                                        <div class="absolute bottom-6 left-1/2 -translate-x-1/2 bg-gray-900 text-gray-200 text-xs rounded px-2 py-1 whitespace-nowrap pointer-events-none opacity-0 group-hover/marker:opacity-100 transition-opacity border border-gray-700 shadow-xl">
-                                            <span x-text="previewFormatTime(previewDeathTimesSeconds[i])"></span>
-                                            <template x-if="previewDeathNames[i]">
-                                                <span x-text="' – ' + previewDeathNames[i]"></span>
-                                            </template>
-                                        </div>
-                                    </div>
-                                </template>
-
-                                <div x-show="previewSeekPreviewTime !== null"
-                                    class="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 bg-white rounded-full pointer-events-none shadow"
-                                    :style="'left:' + previewSeekPreviewPercent + '%'"></div>
+                            <!-- Clip controls -->
+                            <div class="flex items-center gap-1.5 border-l border-ink-500 pl-3">
+                                <button @click="clipSetIn()" class="quick-btn">
+                                    In
+                                    <span x-show="clipInSecs !== null" class="text-gold-500 ml-1 font-mono"
+                                        x-text="previewFormatTime(clipInSecs)"></span>
+                                </button>
+                                <button @click="clipSetOut()" class="quick-btn">
+                                    Out
+                                    <span x-show="clipOutSecs !== null" class="text-gold-500 ml-1 font-mono"
+                                        x-text="previewFormatTime(clipOutSecs)"></span>
+                                </button>
+                                <button @click="clipExport()" :disabled="!canExportClip || clipBusy"
+                                    class="quick-btn"
+                                    :class="canExportClip && !clipBusy ? 'border-gold-500 text-gold-500' : ''">
+                                    <span x-text="clipBusy ? 'Exporting…' : 'Export'"></span>
+                                </button>
+                                <button @click="clipClear()" x-show="clipInSecs !== null || clipOutSecs !== null"
+                                    class="text-parchment-300 hover:text-parchment-700 transition-colors px-1 text-sm">✕</button>
                             </div>
 
-                            <div class="flex items-center gap-3">
-                                <button @click="previewTogglePlay()" class="text-gray-300 hover:text-white transition-colors">
-                                    <svg x-show="!previewIsPlaying" class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
-                                    </svg>
-                                    <svg x-show="previewIsPlaying" class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
-                                    </svg>
-                                </button>
+                            <span x-show="previewDeathMarkerPositions.length > 0"
+                                class="px-2 py-0.5 rounded-full text-[10px]"
+                                style="background: rgba(220,80,80,0.2); color:#e07070; border:1px solid rgba(220,80,80,0.4);">
+                                <span x-text="previewDeathMarkerPositions.length"></span> deaths
+                            </span>
 
-                                <button @click="previewToggleMute()" class="text-gray-300 hover:text-white transition-colors">
-                                    <svg x-show="!previewIsMuted" class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fill-rule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM14.657 2.929a1 1 0 011.414 0A9.972 9.972 0 0119 10a9.972 9.972 0 01-2.929 7.071 1 1 0 01-1.414-1.414A7.971 7.971 0 0017 10c0-2.21-.894-4.208-2.343-5.657a1 1 0 010-1.414zm-2.829 2.828a1 1 0 011.415 0A5.983 5.983 0 0115 10a5.984 5.984 0 01-1.757 4.243 1 1 0 01-1.415-1.415A3.984 3.984 0 0013 10a3.983 3.983 0 00-1.172-2.828 1 1 0 010-1.415z" clip-rule="evenodd" />
-                                    </svg>
-                                    <svg x-show="previewIsMuted" class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fill-rule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM12.293 7.293a1 1 0 011.414 0L15 8.586l1.293-1.293a1 1 0 111.414 1.414L16.414 10l1.293 1.293a1 1 0 01-1.414 1.414L15 11.414l-1.293 1.293a1 1 0 01-1.414-1.414L13.586 10l-1.293-1.293a1 1 0 010-1.414z" clip-rule="evenodd" />
-                                    </svg>
-                                </button>
-
-                                <span class="text-xs text-gray-400 tabular-nums">
-                                    <span x-text="previewFormatTime(previewCurrentTime)"></span>
-                                    <span class="text-gray-600"> / </span>
-                                    <span x-text="previewFormatTime(previewDuration)"></span>
-                                </span>
-
-                                <div class="flex-1"></div>
-
-                                <!-- Clip controls: Mark In / Mark Out / Export -->
-                                <div class="flex items-center gap-1.5 border-l border-gray-700 pl-3 ml-1">
-                                    <button @click="clipSetIn()" :title="'Mark clip start at ' + previewFormatTime(previewCurrentTime)"
-                                        class="text-xs px-2 py-0.5 rounded border border-gray-600 text-gray-300 hover:text-amber-400 hover:border-amber-500/50 transition-colors">
-                                        <span>In</span>
-                                        <template x-if="clipInSecs !== null">
-                                            <span class="text-amber-400 ml-1 tabular-nums" x-text="previewFormatTime(clipInSecs)"></span>
-                                        </template>
-                                    </button>
-                                    <button @click="clipSetOut()" :title="'Mark clip end at ' + previewFormatTime(previewCurrentTime)"
-                                        class="text-xs px-2 py-0.5 rounded border border-gray-600 text-gray-300 hover:text-amber-400 hover:border-amber-500/50 transition-colors">
-                                        <span>Out</span>
-                                        <template x-if="clipOutSecs !== null">
-                                            <span class="text-amber-400 ml-1 tabular-nums" x-text="previewFormatTime(clipOutSecs)"></span>
-                                        </template>
-                                    </button>
-                                    <button @click="clipExport()" :disabled="!canExportClip || clipBusy"
-                                        :title="canExportClip ? 'Export clip' : 'Set In and Out points first'"
-                                        :class="canExportClip && !clipBusy
-                                            ? 'bg-amber-500/20 text-amber-400 border-amber-500/50 hover:bg-amber-500/30 cursor-pointer'
-                                            : 'bg-gray-700 text-gray-500 border-gray-600 cursor-not-allowed opacity-60'"
-                                        class="text-xs px-2 py-0.5 rounded border transition-colors">
-                                        <span x-text="clipBusy ? 'Exporting…' : 'Export'"></span>
-                                    </button>
-                                    <template x-if="clipInSecs !== null || clipOutSecs !== null">
-                                        <button @click="clipClear()" title="Clear marks"
-                                            class="text-xs text-gray-500 hover:text-gray-300 transition-colors px-1">
-                                            ✕
-                                        </button>
-                                    </template>
-                                </div>
-
-                                <template x-if="previewDeathMarkerPositions.length > 0">
-                                    <span class="text-xs bg-red-600/30 text-red-400 border border-red-600/40 rounded-full px-2 py-0.5 flex items-center gap-1">
-                                        💀 <span x-text="previewDeathMarkerPositions.length"></span>
-                                    </span>
-                                </template>
-
-                                <button @click="$refs.previewPlayer.requestFullscreen()" class="text-gray-300 hover:text-white transition-colors">
-                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-                                    </svg>
-                                </button>
-                            </div>
+                            <button @click="$refs.previewPlayer.requestFullscreen()"
+                                class="text-parchment-700 hover:text-parchment-900 transition-colors">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                                </svg>
+                            </button>
                         </div>
                     </div>
                 </div>
 
-                <div class="flex items-center justify-between p-4 border-t border-gray-700">
-                    <div class="text-sm text-gray-400">
+                <div class="flex items-center justify-between p-4 border-t border-ink-500">
+                    <div class="text-xs text-parchment-400">
                         <span x-text="formatFileSize(previewRecording?.size || 0)"></span>
                         <span class="mx-2">•</span>
                         <span x-text="formatFullDate(previewRecording?.modified)"></span>
                     </div>
                     <a :href="'/video/' + (previewRecording?.name || '').split('/').map(encodeURIComponent).join('/')"
                         target="_blank"
-                        class="py-2 px-4 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition-colors">
-                        Open in New Tab
-                    </a>
+                        class="quick-btn">Open in new tab</a>
                 </div>
             </div>
         </div>
@@ -580,6 +717,49 @@
     </div>
 
     <script>
+        // Difficulty ID → display map
+        const DIFFICULTY_NAMES = {
+            1: 'Normal', 2: 'Heroic', 3: 'Mythic',
+            7: 'LFR', 14: 'Normal', 15: 'Heroic',
+            16: 'Mythic', 17: 'LFR', 23: 'Mythic'
+        };
+        const DIFFICULTY_SHORT = {
+            1: 'N', 2: 'H', 3: 'M', 7: 'LFR',
+            14: 'N', 15: 'H', 16: 'M', 17: 'LFR', 23: 'M'
+        };
+
+        // SpecID → class name (subset; covers Dragonflight/War Within active specs).
+        // Each spec ID maps to one class. We use this for class colors on the
+        // death roster. Unknown IDs fall back to neutral parchment.
+        const SPEC_TO_CLASS = {
+            // Death Knight
+            250: 'deathknight', 251: 'deathknight', 252: 'deathknight',
+            // Demon Hunter
+            577: 'demonhunter', 581: 'demonhunter',
+            // Druid
+            102: 'druid', 103: 'druid', 104: 'druid', 105: 'druid',
+            // Evoker
+            1467: 'evoker', 1468: 'evoker', 1473: 'evoker',
+            // Hunter
+            253: 'hunter', 254: 'hunter', 255: 'hunter',
+            // Mage
+            62: 'mage', 63: 'mage', 64: 'mage',
+            // Monk
+            268: 'monk', 269: 'monk', 270: 'monk',
+            // Paladin
+            65: 'paladin', 66: 'paladin', 70: 'paladin',
+            // Priest
+            256: 'priest', 257: 'priest', 258: 'priest',
+            // Rogue
+            259: 'rogue', 260: 'rogue', 261: 'rogue',
+            // Shaman
+            262: 'shaman', 263: 'shaman', 264: 'shaman',
+            // Warlock
+            265: 'warlock', 266: 'warlock', 267: 'warlock',
+            // Warrior
+            71: 'warrior', 72: 'warrior', 73: 'warrior',
+        };
+
         function dashboard() {
             return {
                 connected: false,
@@ -592,6 +772,20 @@
                 },
                 events: [],
                 recordings: [],
+                recordingsMeta: {},   // name → metadata cache
+
+                // Last pull (auto-populated when an encounter ends)
+                lastPull: null,
+
+                // Tonight's session progression (per-boss)
+                progression: { boss: null, pulls: [], kills: 0, bestDuration: 0 },
+
+                // Live "mark moment" feature — local-only, attached to the
+                // active recording and persisted into the metadata once the
+                // pull completes.
+                liveMoments: [],
+                momentJustMarked: false,
+
                 previewRecording: null,
                 previewMetadata: null,
                 previewIsPlaying: false,
@@ -604,8 +798,8 @@
                 previewDeathMarkerPositions: [],
                 previewDeathTimesSeconds: [],
                 previewDeathNames: [],
+                previewMomentPositions: [],
 
-                // Clip export state
                 clipInSecs: null,
                 clipOutSecs: null,
                 clipBusy: false,
@@ -620,22 +814,16 @@
                 uploadProgress: 0,
                 uploadSpeed: '',
 
-                // Event log filter & auto-scroll
-                eventFilter: '',
-                autoScroll: true,
-
-                // OBS reconnect state
                 obsReconnecting: false,
 
-                // Live timer — incremented locally each second so the display
-                // updates smoothly without waiting for the 0.5s socket broadcast
                 liveRecordingDuration: 0,
                 _timerInterval: null,
+                _lastStatusTs: 0,
+                _lastBossName: null,
 
                 init() {
                     this.connectSocket();
                     this.fetchRecordings();
-                    // Tick the live duration counter every second
                     this._timerInterval = setInterval(() => {
                         if (this.status.recorder?.recording) {
                             this.liveRecordingDuration = (this.status.recorder?.recording_duration || 0) +
@@ -644,44 +832,264 @@
                     }, 1000);
                 },
 
-                get filteredEvents() {
-                    if (!this.eventFilter) return this.events;
-                    return this.events.filter(e => e.type && e.type.includes(this.eventFilter));
+                // ── Computed: attempt counter ────────────────────────
+                // Counts how many times we've started the current boss
+                // tonight, including the in-progress attempt.
+                get bossAttemptCount() {
+                    const boss = this.status.recorder?.boss_name;
+                    if (!boss) return 1;
+                    const past = this.progression.boss === boss
+                        ? this.progression.pulls.length : 0;
+                    return past + 1;
                 },
 
+                // ── Computed: previous-pull display strings ──────────
+                get lastPullSubtitle() {
+                    if (!this.lastPull) return '';
+                    const t = this.lastPull.recording?.modified;
+                    if (!t) return '';
+                    const ago = this.formatDate(t);
+                    const attempt = this.lastPull.attempt;
+                    return attempt ? `attempt #${attempt} · ended ${ago}` : `ended ${ago}`;
+                },
+                get lastPullResultLabel() {
+                    if (!this.lastPull) return '';
+                    if (this.lastPull.is_kill) return 'KILL';
+                    const pct = this.lastPull.boss_percent;
+                    return pct ? `WIPE ${pct}%` : 'WIPE';
+                },
+                get lastPullDifficultyId() {
+                    return this.lastPull?.difficulty_id;
+                },
+                get lastPullDifficultyShort() {
+                    return DIFFICULTY_SHORT[this.lastPull?.difficulty_id] || '—';
+                },
+
+                // ── Helpers ──────────────────────────────────────────
+                diffClass(id) {
+                    if (id === 3 || id === 16 || id === 23) return 'diff-mythic';
+                    if (id === 2 || id === 15) return 'diff-heroic';
+                    if (id === 1 || id === 14) return 'diff-normal';
+                    if (id === 7 || id === 17) return 'diff-lfr';
+                    if (id === 4 || id === 8) return 'diff-mplus';
+                    return '';
+                },
+                diffClassFromShort(s) {
+                    if (s === 'M') return 'diff-mythic';
+                    if (s === 'H') return 'diff-heroic';
+                    if (s === 'N') return 'diff-normal';
+                    if (s === 'LFR') return 'diff-lfr';
+                    if (s === 'M+') return 'diff-mplus';
+                    return '';
+                },
+                classColor(specId) {
+                    const cls = SPEC_TO_CLASS[specId];
+                    return cls ? 'c-' + cls : 'text-parchment-700';
+                },
+                className(specId) {
+                    const cls = SPEC_TO_CLASS[specId];
+                    if (!cls) return '';
+                    return cls.charAt(0).toUpperCase() + cls.slice(1).replace('hunter', ' Hunter').replace('knight', ' Knight');
+                },
+
+                // Parse the WCR-style filename for table display:
+                // "2024-08-12 21:45:03 - Tezranok - Queen Ansurek [M] (Wipe).mp4"
+                parseRecordingName(name) {
+                    if (!name) return {};
+                    const base = name.split('/').pop().replace(/\.[^.]+$/, '');
+                    const m = base.match(/^(.+?) - (.+?) - (.+?) \[(\w+)\] \((\w+)\)$/);
+                    if (m) {
+                        return {
+                            date: m[1],
+                            player: m[2],
+                            encounter: m[3],
+                            difficulty: m[4],
+                            result: m[5].toUpperCase(),
+                        };
+                    }
+                    return { encounter: base, difficulty: '', result: '' };
+                },
+
+                progressionBarHeight(p) {
+                    const max = Math.max(...this.progression.pulls.map(x => x.duration), 1);
+                    return Math.max(8, (p.duration / max) * 100);
+                },
+
+                findRecordingByName(name) {
+                    return this.recordings.find(r => r.name === name);
+                },
+
+                // ── Live "mark moment" ───────────────────────────────
+                // Records a timestamp on the in-progress recording. We keep
+                // moments client-side until the pull ends; they're then
+                // attached to the saved metadata via the API.
+                markMoment() {
+                    // Local-only for now: moments are kept in memory and
+                    // lost on page refresh. To persist them across reloads
+                    // and have them appear on the saved recording's
+                    // timeline, the backend would need to (a) accept a
+                    // POST /api/recording/mark endpoint that buffers
+                    // timestamps and (b) write them into the metadata JSON
+                    // when the encounter ends.
+                    if (!this.status.recorder?.recording) return;
+                    const t = this.liveRecordingDuration;
+                    this.liveMoments.push({ timestamp: t, label: '' });
+                    this.momentJustMarked = true;
+                    setTimeout(() => { this.momentJustMarked = false; }, 1500);
+                },
+
+                // ── Data fetch ───────────────────────────────────────
                 async fetchRecordings() {
                     try {
                         const res = await fetch('/api/recordings');
                         const data = await res.json();
                         this.recordings = data.recordings || [];
+                        // Hydrate the most recent few with metadata so we
+                        // can show duration in the table.
+                        this.hydrateRecordingsMetadata(this.recordings.slice(0, 8));
+                        // Promote the most recent recording into lastPull.
+                        if (this.recordings.length > 0) {
+                            await this.loadLastPull(this.recordings[0]);
+                        }
+                        // Build tonight's progression from recent metadata.
+                        await this.rebuildProgression();
                     } catch (e) {
                         console.error('Failed to fetch recordings:', e);
                     }
                 },
 
+                async hydrateRecordingsMetadata(recs) {
+                    const promises = recs.map(async (rec) => {
+                        if (this.recordingsMeta[rec.name]) return;
+                        try {
+                            const url = '/api/recordings/' +
+                                rec.name.split('/').map(encodeURIComponent).join('/') +
+                                '/metadata';
+                            const res = await fetch(url);
+                            if (res.ok) {
+                                const meta = await res.json();
+                                this.recordingsMeta[rec.name] = meta;
+                                rec.duration_estimate = meta.duration;
+                            }
+                        } catch (_) {}
+                    });
+                    await Promise.all(promises);
+                },
+
+                async loadLastPull(rec) {
+                    try {
+                        const url = '/api/recordings/' +
+                            rec.name.split('/').map(encodeURIComponent).join('/') +
+                            '/metadata';
+                        const res = await fetch(url);
+                        if (!res.ok) {
+                            this.lastPull = null;
+                            return;
+                        }
+                        const meta = await res.json();
+                        this.recordingsMeta[rec.name] = meta;
+                        this.lastPull = {
+                            recording: rec,
+                            duration: meta.duration || 0,
+                            is_kill: !!meta.result,
+                            boss_percent: meta.bossPercent || 0,
+                            difficulty_id: meta.difficultyID,
+                            deaths: (meta.deaths || []).filter(d => d.friendly !== false)
+                                .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0)),
+                            attempt: null,  // set later from progression
+                        };
+                    } catch (_) {
+                        this.lastPull = null;
+                    }
+                },
+
+                // Rebuild "tonight's progression" by walking the recordings
+                // list newest → oldest, collecting all attempts on the same
+                // boss until we hit a different boss or a >2h gap. This is
+                // a heuristic but it's honest — every pull came from a real
+                // saved recording.
+                async rebuildProgression() {
+                    if (this.recordings.length === 0) {
+                        this.progression = { boss: null, pulls: [], kills: 0, bestDuration: 0 };
+                        return;
+                    }
+                    const SESSION_GAP = 2 * 3600; // 2 hours in seconds
+                    const collected = [];
+                    let currentBoss = null;
+                    let lastModified = null;
+
+                    for (const rec of this.recordings) {
+                        const parsed = this.parseRecordingName(rec.name);
+                        if (!parsed.encounter) continue;
+                        if (lastModified && (lastModified - rec.modified) > SESSION_GAP) break;
+                        if (currentBoss && parsed.encounter !== currentBoss) break;
+                        currentBoss = parsed.encounter;
+                        lastModified = rec.modified;
+                        // We need duration + result. Try cache first; if not
+                        // there, hit metadata endpoint lazily.
+                        let meta = this.recordingsMeta[rec.name];
+                        if (!meta) {
+                            try {
+                                const url = '/api/recordings/' +
+                                    rec.name.split('/').map(encodeURIComponent).join('/') +
+                                    '/metadata';
+                                const res = await fetch(url);
+                                if (res.ok) {
+                                    meta = await res.json();
+                                    this.recordingsMeta[rec.name] = meta;
+                                }
+                            } catch (_) {}
+                        }
+                        collected.push({
+                            recording_name: rec.name,
+                            duration: meta?.duration || 0,
+                            is_kill: !!meta?.result,
+                            deaths_count: (meta?.deaths || []).length,
+                            boss_percent: meta?.bossPercent || 0,
+                            modified: rec.modified,
+                        });
+                        if (collected.length >= 30) break;  // sanity cap
+                    }
+
+                    // Reverse so attempt #1 is leftmost (oldest).
+                    collected.reverse();
+                    const kills = collected.filter(p => p.is_kill).length;
+                    const best = collected.reduce((acc, p) =>
+                        p.is_kill && (!acc || p.duration < acc) ? p.duration : acc, 0);
+
+                    this.progression = {
+                        boss: currentBoss,
+                        pulls: collected,
+                        kills: kills,
+                        bestDuration: best || (collected.length
+                            ? Math.max(...collected.map(p => p.duration)) : 0),
+                    };
+
+                    // Tag last pull with its attempt number.
+                    if (this.lastPull && collected.length > 0) {
+                        this.lastPull.attempt = collected.length;
+                    }
+                },
+
                 connectSocket() {
                     this.socket = io();
-
-                    this.socket.on('connect', () => {
-                        this.connected = true;
-                    });
-
-                    this.socket.on('disconnect', () => {
-                        this.connected = false;
-                    });
+                    this.socket.on('connect', () => { this.connected = true; });
+                    this.socket.on('disconnect', () => { this.connected = false; });
 
                     this.socket.on('status', (data) => {
+                        const wasRecording = this.status.recorder?.recording;
+                        const newBoss = data.recorder?.boss_name;
+                        // Reset live moments when a new recording starts.
+                        if (data.recorder?.recording && !wasRecording) {
+                            this.liveMoments = [];
+                        }
+                        // Reset progression scope when boss changes.
+                        if (newBoss && newBoss !== this._lastBossName && newBoss !== this.progression.boss) {
+                            this._lastBossName = newBoss;
+                        }
                         this.status = data;
                         this._lastStatusTs = Date.now() / 1000;
-                        // Sync live duration from authoritative value on every broadcast
                         this.liveRecordingDuration = data.recorder?.recording_duration || 0;
-                        // Auto-scroll event log
-                        if (this.autoScroll) {
-                            this.$nextTick(() => {
-                                const el = this.$refs.eventLogContainer;
-                                if (el) el.scrollTop = el.scrollHeight;
-                            });
-                        }
                     });
 
                     this.socket.on('event_log', (data) => {
@@ -692,12 +1100,6 @@
                         this.events.push(event);
                         if (this.events.length > 50) {
                             this.events = this.events.slice(-50);
-                        }
-                        if (this.autoScroll) {
-                            this.$nextTick(() => {
-                                const el = this.$refs.eventLogContainer;
-                                if (el) el.scrollTop = el.scrollHeight;
-                            });
                         }
                     });
 
@@ -719,34 +1121,52 @@
                         if (data.error) {
                             alert('Clip export failed: ' + data.error);
                         }
-                        // 'recordings_updated' fires alongside and refreshes the list
                     });
                 },
 
+                // ── Format helpers ───────────────────────────────────
                 formatDuration(seconds) {
                     const s = Math.max(0, Math.floor(seconds || 0));
                     const mins = Math.floor(s / 60);
                     const secs = s % 60;
                     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
                 },
+                getDifficultyName(id) {
+                    return DIFFICULTY_NAMES[id] || (id ? `Difficulty ${id}` : '');
+                },
+                formatFileSize(bytes) {
+                    if (!bytes) return '0 B';
+                    if (bytes < 1024) return bytes + ' B';
+                    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+                    if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+                    return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+                },
+                formatDate(timestamp) {
+                    const date = new Date(timestamp * 1000);
+                    const diff = Date.now() - date.getTime();
+                    if (diff < 60000) return 'just now';
+                    if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
+                    if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
+                    if (diff < 604800000) return Math.floor(diff / 86400000) + 'd ago';
+                    return date.toLocaleDateString();
+                },
+                formatFullDate(timestamp) {
+                    if (!timestamp) return '';
+                    return new Date(timestamp * 1000).toLocaleString();
+                },
 
+                // ── Manual recording / OBS ───────────────────────────
                 async manualRecordingAction() {
                     const isRecording = this.status.recorder?.recording;
                     try {
-                        if (isRecording) {
-                            const res = await fetch('/api/recording/stop', { method: 'POST' });
-                            const data = await res.json();
-                            if (!res.ok) console.error('Stop failed:', data.error);
-                        } else {
-                            const res = await fetch('/api/recording/start', { method: 'POST' });
-                            const data = await res.json();
-                            if (!res.ok) console.error('Start failed:', data.error);
-                        }
+                        const path = isRecording ? '/api/recording/stop' : '/api/recording/start';
+                        const res = await fetch(path, { method: 'POST' });
+                        const data = await res.json();
+                        if (!res.ok) console.error('Recording action failed:', data.error);
                     } catch (e) {
                         console.error('Recording action failed:', e);
                     }
                 },
-
                 async reconnectOBS() {
                     this.obsReconnecting = true;
                     try {
@@ -758,47 +1178,25 @@
                     }
                 },
 
-                formatEventTime(timestamp) {
-                    if (!timestamp) return '';
-                    const match = timestamp.match(/(\d+):(\d+):(\d+)/);
-                    if (match) return `${match[1]}:${match[2]}:${match[3]}`;
-                    return timestamp.substring(0, 8);
+                // ── Cloud upload (per-recording) ─────────────────────
+                async uploadToCloud(rec) {
+                    if (!rec) return;
+                    try {
+                        const url = '/api/cloud/upload/' +
+                            rec.name.split('/').map(encodeURIComponent).join('/');
+                        const res = await fetch(url, { method: 'POST' });
+                        const data = await res.json();
+                        if (!res.ok) {
+                            alert('Upload failed: ' + (data.error || 'unknown'));
+                        }
+                    } catch (e) {
+                        console.error('Upload failed:', e);
+                    }
                 },
 
-                getDifficultyName(id) {
-                    const names = {
-                        1: 'Normal', 2: 'Heroic', 3: 'Mythic',
-                        7: 'LFR', 14: 'Normal', 15: 'Heroic',
-                        16: 'Mythic', 17: 'LFR', 23: 'Mythic'
-                    };
-                    return names[id] || (id ? `Difficulty ${id}` : '');
-                },
-
-                formatFileSize(bytes) {
-                    if (!bytes) return '0 B';
-                    if (bytes < 1024) return bytes + ' B';
-                    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-                    if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-                    return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
-                },
-
-                formatDate(timestamp) {
-                    const date = new Date(timestamp * 1000);
-                    const now = new Date();
-                    const diff = now - date;
-                    if (diff < 60000) return 'Just now';
-                    if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
-                    if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
-                    if (diff < 604800000) return Math.floor(diff / 86400000) + 'd ago';
-                    return date.toLocaleDateString();
-                },
-
-                formatFullDate(timestamp) {
-                    if (!timestamp) return '';
-                    return new Date(timestamp * 1000).toLocaleString();
-                },
-
+                // ── Preview modal ────────────────────────────────────
                 async openPreview(rec) {
+                    if (!rec) return;
                     this.previewRecording = rec;
                     this.previewMetadata = null;
                     this.previewIsPlaying = false;
@@ -808,10 +1206,10 @@
                     this.previewDeathMarkerPositions = [];
                     this.previewDeathTimesSeconds = [];
                     this.previewDeathNames = [];
+                    this.previewMomentPositions = [];
                     this.clipInSecs = null;
                     this.clipOutSecs = null;
                     this.clipBusy = false;
-                    // Try to fetch companion JSON metadata
                     try {
                         const encodedName = rec.name.split('/').map(encodeURIComponent).join('/');
                         const res = await fetch('/api/recordings/' + encodedName + '/metadata');
@@ -820,6 +1218,11 @@
                             this.$nextTick(() => this.previewBuildDeathMarkers());
                         }
                     } catch (_) {}
+                },
+
+                openPreviewToClip(rec) {
+                    this.openPreview(rec);
+                    // Caller-side: user can hit "In"/"Out" once the modal opens.
                 },
 
                 closePreview() {
@@ -838,16 +1241,22 @@
                     this.previewDeathMarkerPositions = [];
                     this.previewDeathTimesSeconds = [];
                     this.previewDeathNames = [];
+                    this.previewMomentPositions = [];
                     const meta = this.previewMetadata;
-                    if (!meta || !meta.deaths || meta.deaths.length === 0) return;
+                    if (!meta) return;
                     const durationSecs = meta.duration || this.previewDuration;
                     if (!durationSecs) return;
-                    meta.deaths.forEach(death => {
+                    (meta.deaths || []).forEach(death => {
                         const offsetSecs = typeof death === 'object' ? death.timestamp : death;
                         if (offsetSecs < 0 || offsetSecs > durationSecs) return;
                         this.previewDeathMarkerPositions.push((offsetSecs / durationSecs) * 100);
                         this.previewDeathTimesSeconds.push(offsetSecs);
                         this.previewDeathNames.push(typeof death === 'object' ? (death.name || '') : '');
+                    });
+                    (meta.moments || []).forEach(m => {
+                        const t = typeof m === 'object' ? m.timestamp : m;
+                        if (t < 0 || t > durationSecs) return;
+                        this.previewMomentPositions.push((t / durationSecs) * 100);
                     });
                 },
 
@@ -862,13 +1271,6 @@
                     const v = this.$refs.previewPlayer;
                     if (!v) return;
                     v.paused ? v.play() : v.pause();
-                },
-
-                previewToggleMute() {
-                    const v = this.$refs.previewPlayer;
-                    if (!v) return;
-                    v.muted = !v.muted;
-                    this.previewIsMuted = v.muted;
                 },
 
                 previewSeekTo(event) {
@@ -919,7 +1321,6 @@
                 clipSetIn() {
                     const t = this.previewCurrentTime;
                     this.clipInSecs = t;
-                    // Keep In < Out; drop Out if it got invalidated
                     if (this.clipOutSecs !== null && this.clipOutSecs <= t) {
                         this.clipOutSecs = null;
                     }
@@ -956,8 +1357,6 @@
                             alert('Clip export failed: ' + (data.error || 'unknown error'));
                             this.clipBusy = false;
                         }
-                        // On success we leave clipBusy=true until the socket
-                        // 'clip_complete' event fires (handled in connectSocket).
                     } catch (e) {
                         console.error('Clip request error:', e);
                         this.clipBusy = false;
