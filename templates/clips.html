@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clips — WoW Recorder</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        ink: { 900: '#0d0a07', 800: '#13100c', 700: '#1a1610', 600: '#1d1812', 500: '#2a241c', 400: '#3a3328' },
+                        parchment: { 900: '#f0e6cd', 700: '#d4ccb6', 500: '#a89c82', 400: '#8a8270', 300: '#6e6552' },
+                        gold: { 500: '#c9a961', 400: '#d6b975', 600: '#a88a45' },
+                    },
+                    fontFamily: {
+                        display: ['"IM Fell English"', 'Georgia', 'serif'],
+                        sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+                        mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+                    },
+                },
+            },
+        };
+    </script>
+    <style>
+        [x-cloak] { display: none !important; }
+        body { background: #13100c; color: #e8e1d0; }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #1d1812; border-radius: 3px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #3a3328; border-radius: 3px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #5a4f3e; }
+
+        .card { background: #1a1610; border: 1px solid #2a241c; border-radius: 6px; padding: 14px 16px; }
+        .pill {
+            display: inline-flex; align-items: center; gap: 6px;
+            font-size: 11px; padding: 4px 10px; border-radius: 999px;
+            background: #1d1812; border: 1px solid #2a241c; color: #a89c82;
+        }
+        .section-title {
+            font-family: 'IM Fell English', Georgia, serif;
+            font-size: 13px; font-weight: 500; color: #c9a961;
+            letter-spacing: 1.5px; text-transform: uppercase;
+        }
+        .label-cap { font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: #6e6552; }
+
+        .quick-btn {
+            font-size: 11px; padding: 4px 10px; border-radius: 4px;
+            background: #1d1812; border: 1px solid #2a241c; color: #8a8270;
+            cursor: pointer; transition: all 0.15s; white-space: nowrap;
+        }
+        .quick-btn:hover { background: #2a241c; color: #d4ccb6; border-color: #3a3328; }
+        .quick-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        /* Clip card */
+        .clip-card {
+            background: #1a1610;
+            border: 1px solid #2a241c;
+            border-radius: 6px;
+            overflow: hidden;
+            transition: border-color 0.15s;
+        }
+        .clip-card:hover { border-color: #3a3328; }
+        .clip-card.selected { border-color: #c9a961; }
+
+        /* Player overlay controls */
+        .player-controls {
+            position: absolute; bottom: 0; left: 0; right: 0;
+            background: linear-gradient(transparent, rgba(0,0,0,0.95) 40%);
+            padding: 1.5rem 0.75rem 0.6rem;
+            transition: opacity 0.25s;
+        }
+
+        /* Toast */
+        @keyframes toast-in {
+            from { opacity: 0; transform: translateY(-6px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .toast-enter { animation: toast-in 0.2s ease forwards; }
+
+        @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+        .fade-in { animation: fade-in 0.2s ease forwards; }
+    </style>
+</head>
+<body class="min-h-screen" x-data="clipsPage()" x-init="init()">
+<div class="container mx-auto px-4 py-8 max-w-5xl">
+
+    <!-- Header -->
+    <header class="mb-6 flex items-start justify-between">
+        <div>
+            <h1 class="text-3xl font-display text-gold-500 tracking-wide">Clips</h1>
+            <p class="text-parchment-400 text-xs tracking-widest mt-1">⸻ highlights & moments ⸻</p>
+        </div>
+        <div class="flex items-center gap-2">
+            <a href="/" class="pill hover:border-gold-600 hover:text-gold-500 transition-colors cursor-pointer">← Dashboard</a>
+            <a href="/recordings" class="pill hover:border-gold-600 hover:text-gold-500 transition-colors cursor-pointer">Recordings</a>
+        </div>
+    </header>
+
+    <!-- Toasts -->
+    <div class="fixed top-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none" style="max-width:300px;">
+        <template x-for="t in toasts" :key="t.id">
+            <div class="pointer-events-auto toast-enter flex items-start gap-2 px-3.5 py-2.5 rounded-lg text-sm shadow-xl"
+                :style="t.type === 'error'
+                    ? 'background:#1f0c0c;border:1px solid rgba(224,112,112,0.45);color:#e07070;'
+                    : 'background:#0d1a0d;border:1px solid rgba(112,194,89,0.45);color:#8fd06b;'">
+                <span x-text="t.type === 'error' ? '✕' : '✓'" class="shrink-0 font-bold mt-px"></span>
+                <span x-text="t.message" class="leading-snug"></span>
+            </div>
+        </template>
+    </div>
+
+    <!-- Loading -->
+    <div x-show="loading" class="text-center py-20 text-parchment-300 text-sm">Loading clips…</div>
+
+    <!-- Empty state -->
+    <div x-show="!loading && clips.length === 0" x-cloak class="text-center py-24">
+        <div class="text-4xl font-display text-parchment-300 mb-3">No clips yet</div>
+        <p class="text-parchment-400 text-sm">Export clips from the video player on the dashboard or recordings page.</p>
+        <a href="/" class="inline-block mt-4 quick-btn">Go to Dashboard</a>
+    </div>
+
+    <div x-show="!loading && clips.length > 0" x-cloak>
+
+        <!-- Toolbar -->
+        <div class="flex flex-wrap items-center gap-3 mb-5">
+            <div class="flex-1 min-w-40">
+                <input type="text" x-model="search" placeholder="Search clips…"
+                    class="w-full text-sm bg-ink-600 border border-ink-400 rounded px-3 py-1.5 text-parchment-700 placeholder-parchment-300 focus:outline-none focus:border-gold-600">
+            </div>
+            <div class="flex items-center gap-2 text-xs text-parchment-300">
+                <span x-text="filtered.length"></span> clips
+                <span x-show="selected.size > 0" class="text-gold-500">
+                    · <span x-text="selected.size"></span> selected
+                </span>
+            </div>
+            <button x-show="selected.size > 0" @click="deleteSelected()"
+                class="quick-btn text-red-400 border-red-900/50 hover:border-red-700/70 hover:text-red-300">
+                Delete <span x-text="selected.size"></span> selected
+            </button>
+            <div class="flex items-center gap-1 border border-ink-400 rounded overflow-hidden">
+                <button @click="viewMode = 'grid'"
+                    class="px-2.5 py-1.5 transition-colors"
+                    :class="viewMode === 'grid' ? 'bg-ink-500 text-parchment-700' : 'bg-ink-600 text-parchment-300 hover:text-parchment-500'">
+                    <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
+                    </svg>
+                </button>
+                <button @click="viewMode = 'list'"
+                    class="px-2.5 py-1.5 transition-colors"
+                    :class="viewMode === 'list' ? 'bg-ink-500 text-parchment-700' : 'bg-ink-600 text-parchment-300 hover:text-parchment-500'">
+                    <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Grid view -->
+        <div x-show="viewMode === 'grid'"
+            class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <template x-for="clip in filtered" :key="clip.name">
+                <div class="clip-card fade-in"
+                    :class="selected.has(clip.name) ? 'selected' : ''">
+
+                    <!-- Thumbnail / player area -->
+                    <div class="relative bg-black aspect-video group cursor-pointer"
+                        @click="openPlayer(clip)">
+                        <div class="absolute inset-0 flex items-center justify-center">
+                            <div class="w-10 h-10 rounded-full flex items-center justify-center transition-transform group-hover:scale-110"
+                                style="background:rgba(201,169,97,0.9);color:#13100c;">
+                                <svg class="w-4 h-4 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                            </div>
+                        </div>
+                        <!-- Duration badge -->
+                        <div class="absolute bottom-1.5 right-2 font-mono text-[10px] text-white/80"
+                            style="text-shadow:0 1px 3px rgba(0,0,0,0.9);"
+                            x-text="parseClipName(clip.name).duration"></div>
+                        <!-- Selection checkbox -->
+                        <div class="absolute top-2 left-2"
+                            @click.stop="toggleSelect(clip.name)">
+                            <div class="w-5 h-5 rounded border-2 flex items-center justify-center transition-colors"
+                                :class="selected.has(clip.name)
+                                    ? 'bg-gold-500 border-gold-500'
+                                    : 'border-white/40 bg-black/30 opacity-0 group-hover:opacity-100'">
+                                <svg x-show="selected.has(clip.name)" class="w-3 h-3 text-ink-900" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Card info -->
+                    <div class="px-3 py-2.5">
+                        <!-- Rename input -->
+                        <div x-show="renamingClip === clip.name" class="mb-1.5" @click.stop>
+                            <input :id="'rename-input-' + clip.name"
+                                x-model="renameValue"
+                                @keydown.enter="commitRename(clip)"
+                                @keydown.escape="cancelRename()"
+                                @blur="cancelRename()"
+                                class="w-full text-xs bg-ink-600 border border-gold-600 rounded px-2 py-1 text-parchment-700 focus:outline-none">
+                        </div>
+                        <!-- Display name -->
+                        <div x-show="renamingClip !== clip.name"
+                            class="text-xs text-parchment-700 truncate font-medium mb-1"
+                            x-text="parseClipName(clip.name).encounter || clip.name"></div>
+                        <div class="flex items-center justify-between">
+                            <div class="text-[10px] text-parchment-300 space-x-2">
+                                <span x-text="formatFileSize(clip.size)"></span>
+                                <span x-text="formatDate(clip.modified)"></span>
+                            </div>
+                            <div class="flex items-center gap-1">
+                                <button @click.stop="startRename(clip)"
+                                    x-show="renamingClip !== clip.name"
+                                    class="quick-btn px-2 py-0.5 text-[10px]" title="Rename">✎</button>
+                                <a :href="'/video/' + clip.name.split('/').map(encodeURIComponent).join('/')"
+                                    download
+                                    @click.stop
+                                    class="quick-btn px-2 py-0.5 text-[10px]" title="Download">↓</a>
+                                <button @click.stop="deleteClip(clip)"
+                                    class="quick-btn px-2 py-0.5 text-[10px] text-red-400 border-red-900/40 hover:border-red-700/60">✕</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </template>
+        </div>
+
+        <!-- List view -->
+        <div x-show="viewMode === 'list'" class="card">
+            <table class="w-full text-xs">
+                <thead>
+                    <tr class="text-left text-parchment-300 border-b border-ink-500"
+                        style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;">
+                        <th class="pb-2 pr-2 w-6">
+                            <input type="checkbox" class="cursor-pointer"
+                                :checked="selected.size === filtered.length && filtered.length > 0"
+                                @change="toggleSelectAll()">
+                        </th>
+                        <th class="pb-2 px-2 font-medium">Clip</th>
+                        <th class="pb-2 px-2 font-medium">Duration</th>
+                        <th class="pb-2 px-2 font-medium text-right">Size</th>
+                        <th class="pb-2 px-2 font-medium text-right">Date</th>
+                        <th class="pb-2 pl-2 font-medium text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <template x-for="clip in filtered" :key="clip.name">
+                        <tr class="border-t border-ink-500 hover:bg-ink-700/40 transition-colors group">
+                            <td class="py-2 pr-2">
+                                <input type="checkbox" class="cursor-pointer"
+                                    :checked="selected.has(clip.name)"
+                                    @change="toggleSelect(clip.name)">
+                            </td>
+                            <td class="py-2 px-2">
+                                <!-- Inline rename -->
+                                <div x-show="renamingClip === clip.name" class="flex items-center gap-1">
+                                    <input :id="'rename-input-' + clip.name"
+                                        x-model="renameValue"
+                                        @keydown.enter="commitRename(clip)"
+                                        @keydown.escape="cancelRename()"
+                                        @blur="cancelRename()"
+                                        class="flex-1 text-xs bg-ink-600 border border-gold-600 rounded px-2 py-0.5 text-parchment-700 focus:outline-none min-w-0">
+                                    <button @mousedown.prevent="commitRename(clip)" class="quick-btn px-2 py-0.5 text-[10px] text-gold-500 border-gold-600/40">✓</button>
+                                </div>
+                                <span x-show="renamingClip !== clip.name"
+                                    class="text-parchment-700 cursor-pointer hover:text-parchment-900 transition-colors truncate block max-w-xs"
+                                    @click="openPlayer(clip)"
+                                    x-text="parseClipName(clip.name).encounter || clip.name"></span>
+                            </td>
+                            <td class="py-2 px-2 font-mono text-parchment-400"
+                                x-text="parseClipName(clip.name).duration || '—'"></td>
+                            <td class="py-2 px-2 text-right text-parchment-400"
+                                x-text="formatFileSize(clip.size)"></td>
+                            <td class="py-2 px-2 text-right text-parchment-400"
+                                x-text="formatDate(clip.modified)"></td>
+                            <td class="py-2 pl-2 text-right">
+                                <div class="flex items-center justify-end gap-1">
+                                    <button @click="openPlayer(clip)" class="quick-btn px-2 py-0.5 text-[10px]">Play</button>
+                                    <button @click="startRename(clip)" class="quick-btn px-2 py-0.5 text-[10px]">Rename</button>
+                                    <a :href="'/video/' + clip.name.split('/').map(encodeURIComponent).join('/')"
+                                        download class="quick-btn px-2 py-0.5 text-[10px]">Download</a>
+                                    <button @click="deleteClip(clip)"
+                                        class="quick-btn px-2 py-0.5 text-[10px] text-red-400 border-red-900/40 hover:border-red-700/60">Delete</button>
+                                </div>
+                            </td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+
+    </div><!-- /clips present -->
+
+</div><!-- /container -->
+
+<!-- ── Video player modal ───────────────────────────────────────────── -->
+<div x-show="playerClip" x-cloak
+    class="fixed inset-0 bg-black/85 flex items-center justify-center z-50 p-4"
+    @click.self="closePlayer()"
+    @keydown.escape.window="closePlayer()"
+    @keydown.window="handleKey($event)">
+
+    <div class="bg-ink-700 rounded-lg w-full max-w-4xl border border-ink-500 flex flex-col" style="max-height:90vh;">
+
+        <!-- Modal header -->
+        <div class="flex items-center justify-between px-4 py-3 border-b border-ink-500 shrink-0">
+            <h3 class="font-display text-base text-parchment-900 truncate pr-4"
+                x-text="parseClipName(playerClip?.name || '').encounter || playerClip?.name"></h3>
+            <div class="flex items-center gap-2 shrink-0">
+                <a :href="'/video/' + (playerClip?.name || '').split('/').map(encodeURIComponent).join('/')"
+                    download class="quick-btn text-xs">Download</a>
+                <button @click="closePlayer()" class="p-1 text-parchment-400 hover:text-parchment-900 transition-colors">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Player -->
+        <div class="flex-1 min-h-0 p-4">
+            <div x-ref="playerWrapper"
+                class="rounded-lg overflow-hidden bg-black relative group/player"
+                @fullscreenchange="playerIsFullscreen = !!document.fullscreenElement"
+                @mousemove="showControls()"
+                @mouseleave="showControls()">
+
+                <video x-ref="player"
+                    class="w-full aspect-video block"
+                    :class="playerIsFullscreen ? 'h-screen w-screen object-contain' : ''"
+                    :src="playerClip ? '/video/' + playerClip.name.split('/').map(encodeURIComponent).join('/') : ''"
+                    @timeupdate="onTimeUpdate()"
+                    @loadedmetadata="onLoaded()"
+                    @ended="isPlaying = false"
+                    @pause="isPlaying = false"
+                    @play="isPlaying = true"
+                    @click="togglePlay()"
+                    @dblclick.prevent="toggleFullscreen()"
+                    style="cursor:pointer">
+                </video>
+                <div x-effect="if ($refs.player) { $refs.player.muted = isMuted; $refs.player.volume = volume; }"></div>
+
+                <!-- Controls overlay -->
+                <div class="transition-opacity duration-300"
+                    :class="playerIsFullscreen ? (controlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none') : 'opacity-100'"
+                    :style="playerIsFullscreen
+                        ? 'position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,0.97) 40%);padding:1.25rem 1rem 0.75rem;'
+                        : 'background:rgba(0,0,0,0.92);padding:0.75rem'">
+
+                    <!-- Seek bar -->
+                    <div class="relative h-2 bg-white/20 rounded cursor-pointer mb-3"
+                        x-ref="seekBar"
+                        @click="seekTo($event)"
+                        @mousemove="hoverSeek($event)"
+                        @mouseleave="seekPreviewTime = null">
+                        <div class="h-full bg-amber-400 rounded" :style="'width:' + playedPct + '%;'"></div>
+                        <!-- Hover tooltip -->
+                        <div x-show="seekPreviewTime !== null"
+                            class="absolute -top-7 text-[10px] font-mono bg-black/80 text-white px-1.5 py-0.5 rounded pointer-events-none -translate-x-1/2"
+                            :style="'left:' + seekPreviewPct + '%;'"
+                            x-text="fmtTime(seekPreviewTime)"></div>
+                    </div>
+
+                    <div class="flex items-center gap-3 text-xs">
+                        <!-- Play/pause -->
+                        <button @click="togglePlay()" class="text-white/80 hover:text-white transition-colors">
+                            <svg x-show="!isPlaying" class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"/>
+                            </svg>
+                            <svg x-show="isPlaying" class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                            </svg>
+                        </button>
+
+                        <!-- Time -->
+                        <span class="font-mono text-white/70">
+                            <span x-text="fmtTime(currentTime)"></span>
+                            <span class="text-white/30"> / </span>
+                            <span x-text="fmtTime(duration)"></span>
+                        </span>
+
+                        <!-- Volume -->
+                        <div class="flex items-center gap-1.5">
+                            <button @click="isMuted = !isMuted" class="text-white/60 hover:text-white transition-colors shrink-0">
+                                <svg x-show="!isMuted && volume > 0" class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM14.657 2.929a1 1 0 011.414 0A9.972 9.972 0 0119 10a9.972 9.972 0 01-2.929 7.071 1 1 0 01-1.414-1.414A7.971 7.971 0 0017 10c0-2.21-.894-4.208-2.343-5.657a1 1 0 010-1.414zm-2.829 2.828a1 1 0 011.415 0A5.983 5.983 0 0115 10a5.984 5.984 0 01-1.757 4.243 1 1 0 01-1.415-1.415A3.984 3.984 0 0013 10a3.983 3.983 0 00-1.172-2.828 1 1 0 010-1.415z" clip-rule="evenodd"/>
+                                </svg>
+                                <svg x-show="isMuted || volume === 0" class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM12.293 7.293a1 1 0 011.414 0L15 8.586l1.293-1.293a1 1 0 111.414 1.414L16.414 10l1.293 1.293a1 1 0 01-1.414 1.414L15 11.414l-1.293 1.293a1 1 0 01-1.414-1.414L13.586 10l-1.293-1.293a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                                </svg>
+                            </button>
+                            <input type="range" min="0" max="1" step="0.05"
+                                x-model.number="volume"
+                                @input="isMuted = (volume === 0)"
+                                class="w-20 h-1 appearance-none rounded-full cursor-pointer"
+                                style="accent-color:#f59e0b;">
+                        </div>
+
+                        <!-- Speed -->
+                        <div class="flex items-center gap-1">
+                            <template x-for="spd in [0.5,1,1.5,2]" :key="spd">
+                                <button @click="setSpeed(spd)"
+                                    class="px-1.5 py-0.5 rounded text-[10px] font-mono transition-colors"
+                                    :class="speed === spd
+                                        ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
+                                        : 'text-white/40 hover:text-white/70'"
+                                    x-text="spd + '×'"></button>
+                            </template>
+                        </div>
+
+                        <div class="flex-1"></div>
+
+                        <!-- Clip info -->
+                        <span class="text-white/40 text-[10px] font-mono"
+                            x-text="parseClipName(playerClip?.name || '').range"></span>
+
+                        <!-- Fullscreen -->
+                        <button @click="toggleFullscreen()" class="text-white/60 hover:text-white transition-colors">
+                            <svg x-show="!playerIsFullscreen" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/>
+                            </svg>
+                            <svg x-show="playerIsFullscreen" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 9V4m0 0H4m5 0L3 10m12-6h5m0 0v5m0-5l-6 6M9 20v-5m0 5H4m5 0l-6-6m17 6h-5m5 0v-5m0 5l-6-6"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer: clip metadata -->
+        <div class="flex items-center justify-between px-4 py-2.5 border-t border-ink-500 text-xs text-parchment-400 shrink-0">
+            <span x-text="formatFileSize(playerClip?.size || 0)"></span>
+            <span x-text="formatFullDate(playerClip?.modified)"></span>
+        </div>
+    </div>
+</div>
+
+<script>
+function clipsPage() {
+    return {
+        loading: true,
+        clips: [],
+        search: '',
+        viewMode: 'grid',
+        selected: new Set(),
+
+        // Player state
+        playerClip: null,
+        isPlaying: false,
+        currentTime: 0,
+        duration: 0,
+        playedPct: 0,
+        isMuted: false,
+        volume: 1,
+        speed: 1,
+        seekPreviewTime: null,
+        seekPreviewPct: 0,
+        playerIsFullscreen: false,
+        controlsVisible: true,
+        _controlsTimer: null,
+
+        // Toasts
+        toasts: [],
+        _toastSeq: 0,
+
+        // Rename
+        renamingClip: null,
+        renameValue: '',
+
+        // Socket
+        socket: null,
+
+        async init() {
+            await this.fetchClips();
+            this.socket = io();
+            this.socket.on('clips_updated', () => this.fetchClips());
+            this.socket.on('recordings_updated', () => this.fetchClips());
+        },
+
+        async fetchClips() {
+            try {
+                const res = await fetch('/api/clips');
+                const data = await res.json();
+                this.clips = data.clips || [];
+            } catch (e) {
+                console.error('Failed to load clips:', e);
+            }
+            this.loading = false;
+        },
+
+        get filtered() {
+            const q = this.search.trim().toLowerCase();
+            if (!q) return this.clips;
+            return this.clips.filter(c =>
+                c.name.toLowerCase().includes(q) ||
+                (this.parseClipName(c.name).encounter || '').toLowerCase().includes(q)
+            );
+        },
+
+        toggleSelect(name) {
+            const s = new Set(this.selected);
+            s.has(name) ? s.delete(name) : s.add(name);
+            this.selected = s;
+        },
+
+        toggleSelectAll() {
+            if (this.selected.size === this.filtered.length) {
+                this.selected = new Set();
+            } else {
+                this.selected = new Set(this.filtered.map(c => c.name));
+            }
+        },
+
+        startRename(clip) {
+            this.renamingClip = clip.name;
+            // Pre-fill with just the encounter portion (without _clip_ suffix and extension)
+            const parsed = this.parseClipName(clip.name);
+            const stem = (clip.name.split('/').pop() || '').replace(/\.[^.]+$/, '');
+            const withoutClipSuffix = stem.replace(/_clip_\d+-\d+$/, '');
+            // Strip the timestamp prefix if WCR-style
+            const wcrMatch = withoutClipSuffix.match(/^\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2} - .+? - (.+?)(?:\s*\[[^\]]+\])?(?:\s*\([^)]+\))?$/);
+            this.renameValue = wcrMatch ? wcrMatch[1].trim() : (parsed.encounter || withoutClipSuffix);
+            this.$nextTick(() => {
+                const el = document.getElementById('rename-input-' + CSS.escape(clip.name));
+                if (el) { el.focus(); el.select(); }
+            });
+        },
+
+        cancelRename() {
+            this.renamingClip = null;
+            this.renameValue = '';
+        },
+
+        async commitRename(clip) {
+            const newName = this.renameValue.trim();
+            if (!newName) { this.cancelRename(); return; }
+            const encoded = clip.name.split('/').map(encodeURIComponent).join('/');
+            try {
+                const res = await fetch('/api/clips/' + encoded + '/rename', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: newName }),
+                });
+                const data = await res.json();
+                if (!res.ok) { this.toast(data.error || 'Rename failed', 'error'); return; }
+                // Update clip name in local list
+                const idx = this.clips.findIndex(c => c.name === clip.name);
+                if (idx !== -1) this.clips[idx] = { ...this.clips[idx], name: data.name };
+                if (this.playerClip?.name === clip.name) this.playerClip = { ...this.playerClip, name: data.name };
+                this.cancelRename();
+                this.toast('Clip renamed');
+            } catch (e) {
+                this.toast('Rename failed', 'error');
+            }
+        },
+
+        async deleteClip(clip) {
+            const encoded = clip.name.split('/').map(encodeURIComponent).join('/');
+            try {
+                const res = await fetch('/api/clips/' + encoded, { method: 'DELETE' });
+                const data = await res.json();
+                if (!res.ok) { this.toast(data.error || 'Delete failed', 'error'); return; }
+                this.clips = this.clips.filter(c => c.name !== clip.name);
+                const s = new Set(this.selected); s.delete(clip.name); this.selected = s;
+                if (this.playerClip?.name === clip.name) this.closePlayer();
+                this.toast('Clip deleted');
+            } catch (e) {
+                this.toast('Delete failed', 'error');
+            }
+        },
+
+        async deleteSelected() {
+            const names = [...this.selected];
+            let failed = 0;
+            for (const name of names) {
+                const clip = this.clips.find(c => c.name === name);
+                if (!clip) continue;
+                const encoded = name.split('/').map(encodeURIComponent).join('/');
+                try {
+                    const res = await fetch('/api/clips/' + encoded, { method: 'DELETE' });
+                    if (res.ok) {
+                        this.clips = this.clips.filter(c => c.name !== name);
+                        if (this.playerClip?.name === name) this.closePlayer();
+                    } else { failed++; }
+                } catch { failed++; }
+            }
+            this.selected = new Set();
+            if (failed > 0) this.toast(`${failed} deletion(s) failed`, 'error');
+            else this.toast(`${names.length} clip(s) deleted`);
+        },
+
+        // ── Player ──────────────────────────────────────────────────
+
+        openPlayer(clip) {
+            this.playerClip = clip;
+            this.currentTime = 0;
+            this.duration = 0;
+            this.playedPct = 0;
+            this.isPlaying = false;
+            this.speed = 1;
+        },
+
+        closePlayer() {
+            if (this.$refs.player) this.$refs.player.pause();
+            if (document.fullscreenElement) document.exitFullscreen();
+            this.playerClip = null;
+        },
+
+        onLoaded() {
+            this.duration = this.$refs.player?.duration || 0;
+            this.$refs.player.playbackRate = this.speed;
+        },
+
+        onTimeUpdate() {
+            const v = this.$refs.player;
+            if (!v) return;
+            this.currentTime = v.currentTime;
+            this.playedPct = this.duration ? (v.currentTime / this.duration) * 100 : 0;
+        },
+
+        togglePlay() {
+            const v = this.$refs.player;
+            if (!v) return;
+            v.paused ? v.play() : v.pause();
+        },
+
+        seekTo(e) {
+            const v = this.$refs.player;
+            const bar = this.$refs.seekBar;
+            if (!v || !bar || !this.duration) return;
+            const rect = bar.getBoundingClientRect();
+            v.currentTime = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * this.duration;
+        },
+
+        hoverSeek(e) {
+            const bar = this.$refs.seekBar;
+            if (!bar || !this.duration) return;
+            const rect = bar.getBoundingClientRect();
+            const pct = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+            this.seekPreviewPct = pct;
+            this.seekPreviewTime = (pct / 100) * this.duration;
+        },
+
+        setSpeed(spd) {
+            this.speed = spd;
+            if (this.$refs.player) this.$refs.player.playbackRate = spd;
+        },
+
+        toggleFullscreen() {
+            const w = this.$refs.playerWrapper;
+            if (!w) return;
+            document.fullscreenElement ? document.exitFullscreen() : w.requestFullscreen();
+        },
+
+        showControls() {
+            this.controlsVisible = true;
+            clearTimeout(this._controlsTimer);
+            if (this.playerIsFullscreen) {
+                this._controlsTimer = setTimeout(() => { this.controlsVisible = false; }, 2500);
+            }
+        },
+
+        handleKey(e) {
+            if (!this.playerClip) return;
+            if (['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) return;
+            if (e.key === ' ' || e.key === 'k') { e.preventDefault(); this.togglePlay(); }
+            else if (e.key === 'ArrowRight' || e.key === 'l' || e.key === 'L') { e.preventDefault(); if (this.$refs.player) this.$refs.player.currentTime = Math.min(this.$refs.player.duration, this.$refs.player.currentTime + 10); }
+            else if (e.key === 'ArrowLeft'  || e.key === 'j' || e.key === 'J') { e.preventDefault(); if (this.$refs.player) this.$refs.player.currentTime = Math.max(0, this.$refs.player.currentTime - 10); }
+            else if (e.key === 'f' || e.key === 'F') { e.preventDefault(); this.toggleFullscreen(); }
+            else if (e.key === 'm' || e.key === 'M') { e.preventDefault(); this.isMuted = !this.isMuted; }
+        },
+
+        // ── Helpers ──────────────────────────────────────────────────
+
+        // Parse clip filename: "2026-01-21 21-11-57 - PlayerName - BossName [M] (Kill)_clip_180-240.mp4"
+        parseClipName(name) {
+            const base = name.split('/').pop() || name;
+            const stem = base.replace(/\.[^.]+$/, '');
+
+            // Extract the _clip_START-END part
+            const clipMatch = stem.match(/_clip_(\d+)-(\d+)$/);
+            const start = clipMatch ? parseInt(clipMatch[1]) : null;
+            const end   = clipMatch ? parseInt(clipMatch[2]) : null;
+
+            const range    = (start !== null && end !== null) ? `${this.fmtTime(start)}–${this.fmtTime(end)}` : '';
+            const duration = (start !== null && end !== null) ? this.fmtTime(end - start) : '';
+
+            // Strip the _clip_ suffix and try to parse the encounter name
+            const baseStem = clipMatch ? stem.replace(/_clip_\d+-\d+$/, '') : stem;
+
+            // WCR-style: "YYYY-MM-DD HH-MM-SS - Player - BossName [Diff] (Result)"
+            const wcrMatch = baseStem.match(/^\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2} - .+? - (.+?)(?:\s*\[[^\]]+\])?(?:\s*\([^)]+\))?$/);
+            const encounter = wcrMatch ? wcrMatch[1].trim() : baseStem;
+
+            return { encounter, range, duration, start, end };
+        },
+
+        fmtTime(secs) {
+            if (secs == null || isNaN(secs)) return '0:00';
+            const m = Math.floor(secs / 60);
+            const s = Math.floor(secs % 60).toString().padStart(2, '0');
+            return `${m}:${s}`;
+        },
+
+        formatFileSize(bytes) {
+            if (!bytes) return '0 B';
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+            return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+        },
+
+        formatDate(ts) {
+            if (!ts) return '';
+            const d = new Date(ts * 1000);
+            const now = new Date();
+            const diff = (now - d) / 1000;
+            if (diff < 3600)  return Math.floor(diff / 60) + 'm ago';
+            if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+            if (diff < 604800) return Math.floor(diff / 86400) + 'd ago';
+            return d.toLocaleDateString();
+        },
+
+        formatFullDate(ts) {
+            if (!ts) return '';
+            return new Date(ts * 1000).toLocaleString();
+        },
+
+        toast(message, type = 'success', duration = 3500) {
+            const id = ++this._toastSeq;
+            this.toasts.push({ id, message, type });
+            setTimeout(() => { this.toasts = this.toasts.filter(t => t.id !== id); }, duration);
+        },
+    };
+}
+</script>
+</body>
+</html>

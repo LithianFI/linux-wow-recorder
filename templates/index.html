@@ -206,6 +206,13 @@
                         <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
                     </svg>
                 </a>
+                <a href="/clips" class="ml-1 w-8 h-8 inline-flex items-center justify-center rounded
+                    border border-ink-500 bg-ink-600 text-parchment-400 hover:text-gold-500 transition-colors"
+                    title="Clips">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.6">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.36a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/>
+                    </svg>
+                </a>
                 <a href="/config" class="ml-1 w-8 h-8 inline-flex items-center justify-center rounded
                     border border-ink-500 bg-ink-600 text-parchment-400 hover:text-gold-500 transition-colors"
                     title="Settings">
@@ -1024,9 +1031,10 @@
                         // Hydrate the most recent few with metadata so we
                         // can show duration in the table.
                         this.hydrateRecordingsMetadata(this.recordings.slice(0, 8));
-                        // Promote the most recent recording into lastPull.
-                        if (this.recordings.length > 0) {
-                            await this.loadLastPull(this.recordings[0]);
+                        // Promote the most recent non-clip recording into lastPull.
+                        const lastFull = this.recordings.find(r => !/_clip_\d+-\d+/.test(r.name));
+                        if (lastFull) {
+                            await this.loadLastPull(lastFull);
                         }
                         // Build tonight's progression from recent metadata.
                         await this.rebuildProgression();
@@ -1096,6 +1104,7 @@
                     let lastModified = null;
 
                     for (const rec of this.recordings) {
+                        if (/_clip_\d+-\d+/.test(rec.name)) continue;
                         const parsed = this.parseRecordingName(rec.name);
                         if (!parsed.encounter) continue;
                         if (lastModified && (lastModified - rec.modified) > SESSION_GAP) break;

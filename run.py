@@ -327,6 +327,7 @@ def create_clip(filename: str):
             result = export_clip(source_path, start, end)
             print(f"[CLIP] Created: {result.output_path.name}")
             socketio.emit('recordings_updated')
+            socketio.emit('clips_updated')
             socketio.emit('clip_complete', {
                 'source': filename,
                 'output': result.output_path.name,
@@ -395,6 +396,108 @@ def stats_page():
     return render_template('stats.html')
 
 
+@app.route('/clips')
+def clips_page():
+    return render_template('clips.html')
+
+
+@app.route('/api/clips')
+def get_clips():
+    """List all exported clip files."""
+    record_dir = get_recording_directory()
+    if not record_dir:
+        return jsonify({'clips': [], 'directory': None})
+    try:
+        import re as _re
+        _clip_re = _re.compile(r'_clip_\d+-\d+$')
+        s = get_state()
+        ext = s.config_manager.RECORDING_EXTENSION.lower() if s.config_manager else '.mp4'
+        clips = []
+        for file in record_dir.rglob(f'*{ext}'):
+            if file.is_file() and _clip_re.search(file.stem):
+                stat = file.stat()
+                clips.append({
+                    'name': str(file.relative_to(record_dir)),
+                    'size': stat.st_size,
+                    'modified': stat.st_mtime,
+                })
+        clips.sort(key=lambda x: x['modified'], reverse=True)
+        return jsonify({'clips': clips, 'directory': str(record_dir)})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/clips/<path:filename>', methods=['DELETE'])
+def delete_clip(filename: str):
+    """Delete a clip file."""
+    record_dir = get_recording_directory()
+    if not record_dir:
+        return jsonify({'error': 'Recording directory not available'}), 500
+    try:
+        clip_path = _resolve_recording_path(record_dir, filename)
+    except _PathTraversalError:
+        return jsonify({'error': 'Invalid path'}), 403
+    import re as _re
+    if not _re.search(r'_clip_\d+-\d+', clip_path.stem):
+        return jsonify({'error': 'Not a clip file'}), 400
+    if not clip_path.exists():
+        return jsonify({'error': 'File not found'}), 404
+    try:
+        clip_path.unlink()
+        socketio.emit('clips_updated')
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/clips/<path:filename>/rename', methods=['POST'])
+def rename_clip(filename: str):
+    """Rename a clip file. Expects JSON body: {"name": "new display name"}"""
+    import re as _re
+    record_dir = get_recording_directory()
+    if not record_dir:
+        return jsonify({'error': 'Recording directory not available'}), 500
+    try:
+        clip_path = _resolve_recording_path(record_dir, filename)
+    except _PathTraversalError:
+        return jsonify({'error': 'Invalid path'}), 403
+    if not _re.search(r'_clip_\d+-\d+', clip_path.stem):
+        return jsonify({'error': 'Not a clip file'}), 400
+    if not clip_path.exists():
+        return jsonify({'error': 'File not found'}), 404
+
+    payload = request.get_json(silent=True) or {}
+    new_name = (payload.get('name') or '').strip()
+    if not new_name:
+        return jsonify({'error': 'Name is required'}), 400
+
+    # Sanitise: strip characters that are invalid in filenames
+    invalid_chars = r'<>:"/\\|?*'
+    for ch in invalid_chars:
+        new_name = new_name.replace(ch, '_')
+    new_name = new_name.strip('. ')
+    if not new_name:
+        return jsonify({'error': 'Name is invalid after sanitisation'}), 400
+
+    # Preserve the _clip_START-END suffix and extension
+    clip_suffix_match = _re.search(r'(_clip_\d+-\d+)$', clip_path.stem)
+    clip_suffix = clip_suffix_match.group(1) if clip_suffix_match else ''
+    new_stem = new_name + clip_suffix
+    new_path = clip_path.parent / (new_stem + clip_path.suffix)
+
+    if new_path == clip_path:
+        return jsonify({'success': True, 'name': str(new_path.relative_to(record_dir))})
+    if new_path.exists():
+        return jsonify({'error': 'A file with that name already exists'}), 409
+
+    try:
+        clip_path.rename(new_path)
+        socketio.emit('clips_updated')
+        return jsonify({'success': True, 'name': str(new_path.relative_to(record_dir))})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/stats')
 def get_stats():
     """Aggregate statistics across all recording JSON sidecars."""
@@ -402,8 +505,14 @@ def get_stats():
     if not record_dir:
         return jsonify({'error': 'Recording directory not available'}), 500
 
+    import re as _re
+    _clip_re = _re.compile(r'_clip_\d+-\d+')
+
     encounters = []
     for json_path in record_dir.rglob('*.json'):
+        # Skip JSON sidecars that belong to clip files
+        if _clip_re.search(json_path.stem):
+            continue
         try:
             with open(json_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
