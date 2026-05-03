@@ -211,29 +211,42 @@ class CombatEvent:
             print(f"[PARSER] Error parsing dungeon info: {e}")
             return None
     
-    def get_encounter_end_info(self) -> tuple[bool, Optional[str]]:
-        """Get kill/wipe status from ENCOUNTER_END event."""
+    def get_encounter_end_info(self) -> tuple[bool, Optional[str], float]:
+        """Get kill/wipe status and fight percentage from ENCOUNTER_END event.
+
+        ENCOUNTER_END fields:
+          [0] ENCOUNTER_END
+          [1] encounterID
+          [2] encounterName
+          [3] difficultyID
+          [4] groupSize
+          [5] success  (1 = kill, 0 = wipe)
+          [6] fightPercentage  (boss HP% remaining at end; 0 on kill)
+        """
         is_kill = False
         boss_name = None
-        
+        fight_percentage = 0.0
+
         if self.is_encounter_end and len(self.fields) >= 6:
             try:
                 is_kill = self.fields[5] == "1"
                 boss_name = self.fields[2] if len(self.fields) > 2 else None
+                if len(self.fields) >= 7:
+                    fight_percentage = float(self.fields[6])
             except (ValueError, IndexError):
                 pass
-        
-        return is_kill, boss_name
+
+        return is_kill, boss_name, fight_percentage
     
     def get_dungeon_end_info(self) -> tuple[bool, Optional[str]]:
         """Get success status from CHALLENGE_MODE_END event."""
         is_success = False
         dungeon_name = None
         
-        if self.is_dungeon_end and len(self.fields) >= 5:
+        if self.is_dungeon_end and len(self.fields) >= 3:
             try:
                 is_success = self.fields[2] == "1"
-                dungeon_name = self.fields[2] if len(self.fields) > 2 else None
+                dungeon_name = None  # CHALLENGE_MODE_END has no dungeon name field
             except (ValueError, IndexError):
                 pass
         

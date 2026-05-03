@@ -457,7 +457,7 @@ class CombatParser:
         boss_name = self.state.boss_name
         difficulty_id = self.state.difficulty_id
         encounter_duration = self.state.get_encounter_duration()
-        is_kill, _ = event.get_encounter_end_info()
+        is_kill, _, fight_percentage = event.get_encounter_end_info()
 
         # Record the log timestamp — the background end thread will use this
         # as the endpoint for _scan_log_for_encounter_data().
@@ -471,7 +471,8 @@ class CombatParser:
             timestamp=event.timestamp
         )
  
-        self._finalize_metadata(is_kill=is_kill, duration=encounter_duration)
+        self._finalize_metadata(is_kill=is_kill, duration=encounter_duration,
+                                fight_percentage=fight_percentage)
  
         self._emit_event('ENCOUNTER_END', event.timestamp, {
             'boss_name': boss_name,
@@ -541,15 +542,19 @@ class CombatParser:
         self.current_metadata.set_start_time(start_ms)
         self.encounter_start_time = datetime.now()
 
-    def _finalize_metadata(self, is_kill: bool, duration: float):
+    def _finalize_metadata(self, is_kill: bool, duration: float, fight_percentage: float = 0.0):
         """Finalize metadata with encounter result."""
         if not (self.config.GENERATE_METADATA_JSON or self.config.FILE_NAMING_SCHEME == 'wcr'):
             return
 
+        # On a kill the log reports 0% remaining; store as 0 (dead).
+        # On a wipe it reports the actual HP% remaining — use that directly.
+        boss_percent = 0 if is_kill else fight_percentage
+
         self.current_metadata.set_result(
             is_kill=is_kill,
             duration=duration,
-            boss_percent=100 if is_kill else 0,
+            boss_percent=boss_percent,
         )
 
         # Deaths already added to current_metadata by _scan_log_for_deaths()

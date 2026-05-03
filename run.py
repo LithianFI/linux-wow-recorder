@@ -390,6 +390,33 @@ def recordings_page():
     return render_template('recordings.html')
 
 
+@app.route('/stats')
+def stats_page():
+    return render_template('stats.html')
+
+
+@app.route('/api/stats')
+def get_stats():
+    """Aggregate statistics across all recording JSON sidecars."""
+    record_dir = get_recording_directory()
+    if not record_dir:
+        return jsonify({'error': 'Recording directory not available'}), 500
+
+    encounters = []
+    for json_path in record_dir.rglob('*.json'):
+        try:
+            with open(json_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            # Skip files that don't look like recording metadata
+            if 'encounterName' not in data and 'category' not in data:
+                continue
+            encounters.append(data)
+        except Exception:
+            continue
+
+    return jsonify({'encounters': encounters})
+
+
 def get_recording_directory() -> Optional[Path]:
     s = get_state()
     if s.combat_parser and s.combat_parser.file_manager:

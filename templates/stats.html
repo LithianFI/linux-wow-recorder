@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Statistics — WoW Recorder</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        ink: { 900: '#0d0a07', 800: '#13100c', 700: '#1a1610', 600: '#1d1812', 500: '#2a241c', 400: '#3a3328' },
+                        parchment: { 900: '#f0e6cd', 700: '#d4ccb6', 500: '#a89c82', 400: '#8a8270', 300: '#6e6552' },
+                        gold: { 500: '#c9a961', 400: '#d6b975', 600: '#a88a45' },
+                    },
+                    fontFamily: {
+                        display: ['"IM Fell English"', 'Georgia', 'serif'],
+                        sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+                        mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+                    },
+                },
+            },
+        };
+    </script>
+    <style>
+        [x-cloak] { display: none !important; }
+        body { background: #13100c; color: #e8e1d0; }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #1d1812; border-radius: 3px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #3a3328; border-radius: 3px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #5a4f3e; }
+
+        .card { background: #1a1610; border: 1px solid #2a241c; border-radius: 6px; padding: 14px 16px; }
+
+        .section-title {
+            font-family: 'IM Fell English', Georgia, serif;
+            font-size: 13px; font-weight: 500; color: #c9a961;
+            letter-spacing: 1.5px; text-transform: uppercase;
+        }
+
+        .label-cap {
+            font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: #6e6552;
+        }
+
+        .diff-badge {
+            display: inline-block; font-size: 10px; letter-spacing: 1.5px;
+            padding: 2px 8px; border-radius: 3px; font-weight: 500; border: 1px solid;
+        }
+        .diff-M   { background: rgba(255,128,0,0.14); color: #ff8c1a; border-color: rgba(255,128,0,0.35); }
+        .diff-H   { background: rgba(115,173,255,0.12); color: #73adff; border-color: rgba(115,173,255,0.32); }
+        .diff-N   { background: rgba(135,207,99,0.12); color: #87cf63; border-color: rgba(135,207,99,0.32); }
+        .diff-LFR { background: rgba(168,156,130,0.12); color: #a89c82; border-color: rgba(168,156,130,0.32); }
+        .diff-Mp  { background: rgba(157,157,255,0.12); color: #9d9dff; border-color: rgba(157,157,255,0.32); }
+
+        .pill {
+            display: inline-flex; align-items: center; gap: 6px;
+            font-size: 11px; padding: 4px 10px; border-radius: 999px;
+            background: #1d1812; border: 1px solid #2a241c; color: #a89c82;
+        }
+
+        .stat-tile {
+            background: #1a1610;
+            border: 1px solid #2a241c;
+            border-radius: 6px;
+            padding: 12px 14px;
+        }
+
+        .filter-pill {
+            font-size: 11px; padding: 3px 10px; border-radius: 4px;
+            background: #1d1812; border: 1px solid #2a241c; color: #6e6552;
+            cursor: pointer; transition: all 0.15s;
+        }
+        .filter-pill:hover { color: #d4ccb6; border-color: #3a3328; }
+        .filter-pill.active { background: rgba(201,169,97,0.15); border-color: #c9a961; color: #c9a961; }
+
+        /* Bar chart bars */
+        .hp-bar-fill {
+            transition: width 0.5s ease;
+        }
+
+        @keyframes fade-in {
+            from { opacity: 0; transform: translateY(6px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .fade-in { animation: fade-in 0.3s ease forwards; }
+    </style>
+</head>
+<body class="min-h-screen" x-data="statsPage()" x-init="init()">
+<div class="container mx-auto px-4 py-8 max-w-5xl">
+
+    <!-- Header -->
+    <header class="mb-6 flex items-start justify-between">
+        <div>
+            <h1 class="text-3xl font-display text-gold-500 tracking-wide">Statistics</h1>
+            <p class="text-parchment-400 text-xs tracking-widest mt-1">⸻ all your pulls, distilled ⸻</p>
+        </div>
+        <div class="flex items-center gap-2">
+            <a href="/" class="pill hover:border-gold-600 hover:text-gold-500 transition-colors cursor-pointer">← Dashboard</a>
+            <a href="/recordings" class="pill hover:border-gold-600 hover:text-gold-500 transition-colors cursor-pointer">Recordings</a>
+        </div>
+    </header>
+
+    <!-- Loading -->
+    <div x-show="loading" class="text-center py-20">
+        <div class="text-parchment-300 text-sm">Loading statistics…</div>
+    </div>
+
+    <!-- No data -->
+    <div x-show="!loading && allEncounters.length === 0" class="text-center py-20">
+        <div class="text-parchment-400 text-2xl font-display mb-2">No data yet</div>
+        <div class="text-parchment-300 text-sm">Statistics appear after your first recorded encounter.</div>
+    </div>
+
+    <div x-show="!loading && allEncounters.length > 0" x-cloak>
+
+        <!-- ── Summary tiles ───────────────────────────────────── -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+            <div class="stat-tile">
+                <div class="label-cap mb-1">Total pulls</div>
+                <div class="font-mono text-2xl text-parchment-900" x-text="summary.totalPulls"></div>
+            </div>
+            <div class="stat-tile">
+                <div class="label-cap mb-1">Kills</div>
+                <div class="font-mono text-2xl" style="color:#8fd06b;" x-text="summary.totalKills"></div>
+            </div>
+            <div class="stat-tile">
+                <div class="label-cap mb-1">Total time recorded</div>
+                <div class="font-mono text-2xl text-parchment-900" x-text="formatDurationHMS(summary.totalSeconds)"></div>
+            </div>
+            <div class="stat-tile">
+                <div class="label-cap mb-1">Bosses attempted</div>
+                <div class="font-mono text-2xl text-parchment-900" x-text="summary.uniqueBosses"></div>
+            </div>
+        </div>
+
+        <!-- ── Filters ─────────────────────────────────────────── -->
+        <div class="card mb-5 flex flex-wrap items-center gap-3">
+            <div class="flex items-center gap-1.5">
+                <span class="label-cap">Difficulty</span>
+                <template x-for="d in ['All','M','H','N','LFR','M+']" :key="d">
+                    <button class="filter-pill" :class="{ active: diffFilter === d }"
+                        @click="diffFilter = d" x-text="d"></button>
+                </template>
+            </div>
+            <div class="w-px h-4 bg-ink-400 hidden md:block"></div>
+            <div class="flex items-center gap-1.5">
+                <span class="label-cap">Category</span>
+                <template x-for="c in ['All','Raids','MythicPlus','Manual']" :key="c">
+                    <button class="filter-pill" :class="{ active: catFilter === c }"
+                        @click="catFilter = c" x-text="c === 'MythicPlus' ? 'M+' : c"></button>
+                </template>
+            </div>
+            <div class="ml-auto text-xs text-parchment-300">
+                <span x-text="filteredEncounters.length"></span> pulls
+            </div>
+        </div>
+
+        <!-- ── Per-boss table ──────────────────────────────────── -->
+        <section class="mb-5">
+            <div class="card">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="section-title">Per-boss breakdown</h3>
+                    <div class="flex items-center gap-1.5">
+                        <span class="label-cap">Sort</span>
+                        <select x-model="bossSort"
+                            class="text-xs bg-ink-600 border border-ink-400 rounded px-2 py-1 text-parchment-500 cursor-pointer">
+                            <option value="pulls">Most pulls</option>
+                            <option value="name">Name</option>
+                            <option value="best">Best time</option>
+                            <option value="recent">Most recent</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div x-show="bossRows.length === 0" class="text-parchment-300 text-xs italic py-4 text-center">
+                    No encounters match the current filters.
+                </div>
+
+                <div class="space-y-2">
+                    <template x-for="boss in bossRows" :key="boss.key">
+                        <div class="border border-ink-500 rounded-md overflow-hidden fade-in">
+                            <!-- Boss header row -->
+                            <div class="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-ink-700/40 transition-colors"
+                                @click="boss.expanded = !boss.expanded">
+
+                                <!-- Kill/wipe indicator bar -->
+                                <div class="w-1 self-stretch rounded-full shrink-0"
+                                    :style="boss.kills > 0 ? 'background:#8fd06b;' : 'background:#e07070;'"></div>
+
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex items-center gap-2 flex-wrap">
+                                        <span class="font-display text-sm text-parchment-900" x-text="boss.name"></span>
+                                        <span class="diff-badge" :class="'diff-' + boss.difficulty.replace('+','')"
+                                            x-text="boss.difficulty"></span>
+                                        <span x-show="boss.category === 'MythicPlus'" class="text-[10px] text-parchment-300"
+                                            x-text="boss.keystoneRange"></span>
+                                    </div>
+                                </div>
+
+                                <!-- Stats strip -->
+                                <div class="hidden md:flex items-center gap-4 text-xs shrink-0">
+                                    <div class="text-center">
+                                        <div class="font-mono text-parchment-700" x-text="boss.pulls"></div>
+                                        <div class="label-cap">pulls</div>
+                                    </div>
+                                    <div class="text-center">
+                                        <div class="font-mono" style="color:#8fd06b;" x-text="boss.kills"></div>
+                                        <div class="label-cap">kills</div>
+                                    </div>
+                                    <div class="text-center">
+                                        <div class="font-mono text-parchment-700"
+                                            x-text="boss.bestDuration ? formatDuration(boss.bestDuration) : '—'"></div>
+                                        <div class="label-cap">best</div>
+                                    </div>
+                                    <div class="text-center">
+                                        <div class="font-mono text-parchment-700"
+                                            x-text="boss.avgDuration ? formatDuration(boss.avgDuration) : '—'"></div>
+                                        <div class="label-cap">avg</div>
+                                    </div>
+                                    <div class="text-center" x-show="boss.bestWipePercent !== null">
+                                        <div class="font-mono text-parchment-700"
+                                            x-text="boss.bestWipePercent !== null ? boss.bestWipePercent.toFixed(1) + '%' : '—'"></div>
+                                        <div class="label-cap">best pull</div>
+                                    </div>
+                                    <div class="text-center">
+                                        <div class="font-mono text-red-400" x-text="boss.totalDeaths"></div>
+                                        <div class="label-cap">deaths</div>
+                                    </div>
+                                </div>
+
+                                <svg class="w-3.5 h-3.5 text-parchment-300 transition-transform shrink-0"
+                                    :class="boss.expanded ? 'rotate-180' : ''"
+                                    fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                                </svg>
+                            </div>
+
+                            <!-- Mobile stats strip -->
+                            <div class="flex md:hidden items-center gap-4 px-4 pb-2 text-xs">
+                                <span><span class="font-mono text-parchment-700" x-text="boss.pulls"></span> <span class="label-cap">pulls</span></span>
+                                <span><span class="font-mono" style="color:#8fd06b;" x-text="boss.kills"></span> <span class="label-cap">kills</span></span>
+                                <span><span class="font-mono text-parchment-700" x-text="boss.bestDuration ? formatDuration(boss.bestDuration) : '—'"></span> <span class="label-cap">best</span></span>
+                                <span><span class="font-mono text-red-400" x-text="boss.totalDeaths"></span> <span class="label-cap">deaths</span></span>
+                            </div>
+
+                            <!-- Expanded: pull history chart -->
+                            <div x-show="boss.expanded" x-cloak
+                                class="border-t border-ink-500 bg-ink-800/60 px-3 pt-3 pb-2">
+
+                                <!-- Pull history bars -->
+                                <div class="label-cap mb-2">Pull history — bar height = duration, colour = result</div>
+                                <div class="flex items-end gap-0.5 h-16 mb-1">
+                                    <template x-for="(pull, pi) in boss.pulls_list" :key="pi">
+                                        <div class="flex-1 flex flex-col items-center gap-0.5 min-w-0 group cursor-default"
+                                            :title="pullTooltip(pull)">
+                                            <div class="w-full rounded-t-sm"
+                                                :style="pullBarStyle(pull, boss.maxDuration)"></div>
+                                            <span class="font-mono text-[8px] text-parchment-300"
+                                                x-text="pull.result ? '★' : ''"></span>
+                                        </div>
+                                    </template>
+                                </div>
+                                <div class="flex justify-between text-[10px] text-parchment-300">
+                                    <span>Pull #1</span>
+                                    <span class="text-gold-500">★ kill</span>
+                                    <span>Pull #<span x-text="boss.pulls_list.length"></span></span>
+                                </div>
+
+                                <!-- Boss HP% progress across wipes (only if we have real data) -->
+                                <template x-if="boss.hasPercentData">
+                                    <div class="mt-3 pt-3 border-t border-ink-500">
+                                        <div class="label-cap mb-2">Boss HP% remaining at wipe (lower = closer to kill)</div>
+                                        <div class="space-y-1">
+                                            <template x-for="(pull, pi) in boss.wipes_with_pct" :key="pi">
+                                                <div class="flex items-center gap-2 text-xs">
+                                                    <span class="font-mono text-parchment-300 w-8 text-right shrink-0"
+                                                        x-text="pull.pct.toFixed(1) + '%'"></span>
+                                                    <div class="flex-1 h-1.5 bg-ink-600 rounded overflow-hidden">
+                                                        <div class="h-full rounded hp-bar-fill"
+                                                            :style="'width:' + pull.pct + '%;background:' + hpBarColor(pull.pct)"></div>
+                                                    </div>
+                                                    <span class="font-mono text-parchment-400 text-[10px] shrink-0"
+                                                        x-text="formatDuration(pull.duration)"></span>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </template>
+
+                                <!-- Death summary -->
+                                <div x-show="boss.topKillers.length > 0" class="mt-3 pt-3 border-t border-ink-500">
+                                    <div class="label-cap mb-1.5">Most deaths</div>
+                                    <div class="flex flex-wrap gap-2">
+                                        <template x-for="k in boss.topKillers" :key="k.name">
+                                            <span class="text-xs px-2 py-0.5 rounded bg-ink-600 border border-ink-400">
+                                                <span class="text-red-400 font-mono" x-text="k.count"></span>
+                                                <span class="text-parchment-500 ml-1" x-text="k.name"></span>
+                                            </span>
+                                        </template>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </section>
+
+        <!-- ── Death leaderboard ───────────────────────────────── -->
+        <section class="mb-5">
+            <div class="card">
+                <h3 class="section-title mb-4">Death leaderboard</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- By player -->
+                    <div>
+                        <div class="label-cap mb-2">By player (total deaths across all pulls)</div>
+                        <div class="space-y-1.5">
+                            <template x-for="(p, i) in deathsByPlayer.slice(0,10)" :key="p.name">
+                                <div class="flex items-center gap-2 text-xs">
+                                    <span class="font-mono text-parchment-300 w-4 text-right shrink-0"
+                                        x-text="i+1"></span>
+                                    <span class="flex-1 text-parchment-700 truncate" x-text="p.name"></span>
+                                    <div class="w-24 h-1.5 bg-ink-600 rounded overflow-hidden shrink-0">
+                                        <div class="h-full bg-red-600/60 rounded"
+                                            :style="'width:' + (p.count / deathsByPlayer[0]?.count * 100) + '%'"></div>
+                                    </div>
+                                    <span class="font-mono text-red-400 w-6 text-right shrink-0"
+                                        x-text="p.count"></span>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                    <!-- By boss -->
+                    <div>
+                        <div class="label-cap mb-2">By encounter (total deaths)</div>
+                        <div class="space-y-1.5">
+                            <template x-for="(b, i) in deathsByBoss.slice(0,10)" :key="b.name">
+                                <div class="flex items-center gap-2 text-xs">
+                                    <span class="font-mono text-parchment-300 w-4 text-right shrink-0"
+                                        x-text="i+1"></span>
+                                    <span class="flex-1 text-parchment-700 truncate" x-text="b.name"></span>
+                                    <div class="w-24 h-1.5 bg-ink-600 rounded overflow-hidden shrink-0">
+                                        <div class="h-full bg-red-600/60 rounded"
+                                            :style="'width:' + (b.count / deathsByBoss[0]?.count * 100) + '%'"></div>
+                                    </div>
+                                    <span class="font-mono text-red-400 w-6 text-right shrink-0"
+                                        x-text="b.count"></span>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </div><!-- /x-show data present -->
+</div><!-- /container -->
+
+<script>
+function statsPage() {
+    return {
+        loading: true,
+        allEncounters: [],
+        diffFilter: 'All',
+        catFilter: 'All',
+        bossSort: 'pulls',
+
+        async init() {
+            try {
+                const res = await fetch('/api/stats');
+                const data = await res.json();
+                this.allEncounters = (data.encounters || []).filter(e => e.encounterName || e.zoneName);
+            } catch (e) {
+                console.error('Failed to load stats:', e);
+            }
+            this.loading = false;
+        },
+
+        get filteredEncounters() {
+            return this.allEncounters.filter(e => {
+                const diff = e.difficulty || '';
+                const cat  = e.category  || '';
+                if (this.diffFilter !== 'All' && diff !== this.diffFilter) return false;
+                if (this.catFilter  !== 'All' && cat  !== this.catFilter)  return false;
+                return true;
+            });
+        },
+
+        get summary() {
+            const enc = this.filteredEncounters;
+            return {
+                totalPulls:   enc.length,
+                totalKills:   enc.filter(e => e.result === true).length,
+                totalSeconds: enc.reduce((s, e) => s + (e.duration || 0), 0),
+                uniqueBosses: new Set(enc.map(e => e.encounterName || e.zoneName)).size,
+            };
+        },
+
+        get bossRows() {
+            const groups = {};
+            for (const e of this.filteredEncounters) {
+                const name = e.encounterName || e.zoneName || 'Unknown';
+                const diff = e.difficulty || 'N';
+                const cat  = e.category  || 'Raids';
+                const key  = name + '|' + diff;
+                if (!groups[key]) {
+                    groups[key] = {
+                        key, name, difficulty: diff, category: cat,
+                        pulls: 0, kills: 0, totalDeaths: 0,
+                        durations: [], wipes_with_pct: [],
+                        deathNames: {}, keystoneLevels: [],
+                        pulls_list: [], lastTimestamp: 0,
+                        expanded: false,
+                    };
+                }
+                const g = groups[key];
+                g.pulls++;
+                if (e.result === true) g.kills++;
+                const deaths = e.deaths || [];
+                g.totalDeaths += deaths.length;
+                deaths.forEach(d => {
+                    const n = d.name || 'Unknown';
+                    g.deathNames[n] = (g.deathNames[n] || 0) + 1;
+                });
+                if (e.duration) g.durations.push(e.duration);
+                if (!e.result && e.bossPercent !== undefined && e.bossPercent > 0) {
+                    g.wipes_with_pct.push({ pct: e.bossPercent, duration: e.duration || 0 });
+                }
+                if (e.keystoneLevel) g.keystoneLevels.push(e.keystoneLevel);
+                if (e.start && e.start > g.lastTimestamp) g.lastTimestamp = e.start;
+                g.pulls_list.push({
+                    result: e.result === true,
+                    duration: e.duration || 0,
+                    deaths: deaths.length,
+                    bossPercent: e.bossPercent,
+                });
+            }
+
+            return Object.values(groups).map(g => {
+                const durs = g.durations.filter(Boolean);
+                g.bestDuration = durs.length ? Math.min(...durs) : null;
+                g.avgDuration  = durs.length ? durs.reduce((a, b) => a + b, 0) / durs.length : null;
+                g.maxDuration  = durs.length ? Math.max(...durs) : 1;
+                g.hasPercentData = g.wipes_with_pct.length > 0;
+                g.bestWipePercent = g.wipes_with_pct.length
+                    ? Math.min(...g.wipes_with_pct.map(w => w.pct))
+                    : null;
+                g.wipes_with_pct.sort((a, b) => a.pct - b.pct);
+                g.topKillers = Object.entries(g.deathNames)
+                    .map(([name, count]) => ({ name, count }))
+                    .sort((a, b) => b.count - a.count)
+                    .slice(0, 5);
+                if (g.keystoneLevels.length) {
+                    const mn = Math.min(...g.keystoneLevels), mx = Math.max(...g.keystoneLevels);
+                    g.keystoneRange = mn === mx ? `+${mn}` : `+${mn}–+${mx}`;
+                } else {
+                    g.keystoneRange = '';
+                }
+                return g;
+            }).sort((a, b) => {
+                if (this.bossSort === 'pulls')  return b.pulls - a.pulls;
+                if (this.bossSort === 'name')   return a.name.localeCompare(b.name);
+                if (this.bossSort === 'best')   return (a.bestDuration || 9999) - (b.bestDuration || 9999);
+                if (this.bossSort === 'recent') return b.lastTimestamp - a.lastTimestamp;
+                return 0;
+            });
+        },
+
+        get deathsByPlayer() {
+            const counts = {};
+            for (const e of this.filteredEncounters) {
+                (e.deaths || []).forEach(d => {
+                    const n = d.name || 'Unknown';
+                    counts[n] = (counts[n] || 0) + 1;
+                });
+            }
+            return Object.entries(counts)
+                .map(([name, count]) => ({ name, count }))
+                .sort((a, b) => b.count - a.count);
+        },
+
+        get deathsByBoss() {
+            const counts = {};
+            for (const e of this.filteredEncounters) {
+                const name = e.encounterName || e.zoneName || 'Unknown';
+                counts[name] = (counts[name] || 0) + (e.deaths || []).length;
+            }
+            return Object.entries(counts)
+                .map(([name, count]) => ({ name, count }))
+                .sort((a, b) => b.count - a.count);
+        },
+
+        // ── Helpers ──────────────────────────────────────────────
+
+        formatDuration(secs) {
+            if (!secs) return '0:00';
+            const m = Math.floor(secs / 60);
+            const s = Math.floor(secs % 60).toString().padStart(2, '0');
+            return `${m}:${s}`;
+        },
+
+        formatDurationHMS(secs) {
+            if (!secs) return '0:00';
+            const h = Math.floor(secs / 3600);
+            const m = Math.floor((secs % 3600) / 60);
+            const s = Math.floor(secs % 60).toString().padStart(2, '0');
+            return h > 0 ? `${h}h ${m}m` : `${m}m ${s}s`;
+        },
+
+        pullBarStyle(pull, maxDuration) {
+            const pct = maxDuration > 0 ? Math.max(8, (pull.duration / maxDuration) * 100) : 8;
+            const color = pull.result
+                ? 'rgba(112,194,89,0.55)'
+                : 'rgba(220,80,80,0.45)';
+            return `height:${pct}%;background:${color};width:100%;`;
+        },
+
+        pullTooltip(pull) {
+            const res = pull.result ? 'KILL' : 'WIPE';
+            const pct = (pull.bossPercent > 0 && !pull.result) ? ` · ${pull.bossPercent.toFixed(1)}% HP` : '';
+            return `${res} · ${this.formatDuration(pull.duration)} · ${pull.deaths} deaths${pct}`;
+        },
+
+        hpBarColor(pct) {
+            // Green near 0%, red near 100%
+            if (pct < 10) return '#8fd06b';
+            if (pct < 25) return '#c9a961';
+            if (pct < 50) return '#ff8c1a';
+            return '#e07070';
+        },
+    };
+}
+</script>
+</body>
+</html>
