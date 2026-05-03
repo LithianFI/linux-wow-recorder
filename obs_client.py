@@ -39,6 +39,7 @@ class OBSClient:
         self.timeout = timeout
         self.client = None
         self._is_connected = False
+        self._cached_record_directory: str = ''
     
     # ---------------------------------------------------------------------
     # Connection Management
@@ -188,6 +189,8 @@ class OBSClient:
             Dictionary with recording settings, or None on error
         """
         if not self._ensure_connection():
+            if self._cached_record_directory:
+                return {'record_directory': self._cached_record_directory}
             return None
         
         try:
@@ -197,6 +200,7 @@ class OBSClient:
             response = self.client.get_record_directory()
             if hasattr(response, 'record_directory'):
                 settings['record_directory'] = response.record_directory
+                self._cached_record_directory = response.record_directory
             
             # Get output settings if available
             try:
@@ -210,6 +214,8 @@ class OBSClient:
             
         except Exception as e:
             print(f"[OBS] ⚠️ Failed to get recording settings: {e}")
+            if self._cached_record_directory:
+                return {'record_directory': self._cached_record_directory}
             return None
     
     def get_last_recording_info(self) -> dict:

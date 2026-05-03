@@ -403,12 +403,8 @@
                             x-show="(lastPull?.deaths || []).length > 0">
                             <template x-for="(d, i) in (lastPull?.deaths || []).slice(0, 6)" :key="i">
                                 <div class="flex justify-between gap-2">
-                                    <span class="truncate">
-                                        <span :class="classColor(d.specId)"
-                                            x-text="d.name || 'unknown'"></span>
-                                        <span class="text-parchment-300 text-[10px] ml-1"
-                                            x-text="className(d.specId)"></span>
-                                    </span>
+                                    <span class="truncate text-parchment-200"
+                                        x-text="d.name || 'unknown'"></span>
                                     <span class="font-mono text-parchment-400 shrink-0"
                                         x-text="formatDuration(d.timestamp)"></span>
                                 </div>
@@ -595,9 +591,19 @@
             </div>
         </section>
 
-        <!-- ═══════════════════════════════════════════════════════
-             VIDEO PREVIEW MODAL (kept from original — works as-is)
-             ═══════════════════════════════════════════════════════ -->
+        <!-- Toast notifications -->
+        <div class="fixed top-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none"
+            style="max-width:320px;">
+            <template x-for="t in toasts" :key="t.id">
+                <div class="pointer-events-auto flex items-start gap-2.5 px-3.5 py-2.5 rounded-lg text-sm shadow-xl transition-all"
+                    :style="t.type === 'error'
+                        ? 'background:#1f0c0c;border:1px solid rgba(224,112,112,0.45);color:#e07070;'
+                        : 'background:#0d1a0d;border:1px solid rgba(112,194,89,0.45);color:#8fd06b;'">
+                    <span x-text="t.type === 'error' ? '✕' : '✓'" class="shrink-0 font-bold mt-px"></span>
+                    <span x-text="t.message" class="leading-snug"></span>
+                </div>
+            </template>
+        </div>
         <div x-show="previewRecording" x-cloak
             class="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
             @click.self="closePreview()"
@@ -614,89 +620,146 @@
                     </button>
                 </div>
 
-                <div class="p-4 flex-1 min-h-0">
-                    <div class="aspect-video bg-black rounded-t-lg overflow-hidden">
-                        <video x-ref="previewPlayer" class="w-full h-full"
+                <div class="p-4 flex-1 min-h-0"
+                    @keydown.window="previewHandleKey($event)">
+
+                    <!-- Fullscreen-capable wrapper: fullscreen this div, not the bare <video> -->
+                    <div x-ref="previewWrapper"
+                        class="rounded-lg overflow-hidden bg-black group/player relative"
+                        @fullscreenchange="previewIsFullscreen = !!document.fullscreenElement"
+                        @mousemove="previewShowControls()"
+                        @mouseleave="previewShowControls()">
+
+                        <video x-ref="previewPlayer" class="w-full aspect-video block"
+                            :class="previewIsFullscreen ? 'h-screen w-screen object-contain' : ''"
                             :src="previewRecording ? '/video/' + previewRecording.name.split('/').map(encodeURIComponent).join('/') : ''"
                             @timeupdate="previewOnTimeUpdate()" @loadedmetadata="previewOnVideoLoaded()"
                             @ended="previewIsPlaying = false" @pause="previewIsPlaying = false"
-                            @play="previewIsPlaying = true">
+                            @play="previewIsPlaying = true"
+                            @click="previewTogglePlay()"
+                            @dblclick.prevent="previewToggleFullscreen()"
+                            style="cursor:pointer">
                         </video>
-                    </div>
+                        <div x-effect="if ($refs.previewPlayer) { $refs.previewPlayer.muted = previewIsMuted; $refs.previewPlayer.volume = previewVolume; }"></div>
 
-                    <!-- Timeline with death markers -->
-                    <div class="bg-ink-800 rounded-b-lg p-3">
-                        <div class="relative h-2 bg-ink-600 rounded cursor-pointer mb-3"
-                            x-ref="previewTimeline"
-                            @click="previewSeekTo($event)"
-                            @mousemove="previewHoverSeek($event)"
-                            @mouseleave="previewSeekPreviewTime = null">
-                            <div class="h-full bg-gold-500 rounded transition-all"
-                                :style="'width:' + previewPlayedPercent + '%;'"></div>
-                            <template x-for="(pct, i) in previewDeathMarkerPositions" :key="i">
-                                <div class="absolute top-0 bottom-0 w-0.5 bg-red-500"
-                                    :style="'left:' + pct + '%;'"
-                                    @click.stop="previewSeekToMarker(pct)"></div>
-                            </template>
-                            <template x-for="(pct, i) in previewMomentPositions" :key="'m'+i">
-                                <div class="absolute -top-1 -bottom-1 w-0.5 bg-gold-500"
-                                    :style="'left:' + pct + '%;'"
-                                    @click.stop="previewSeekToMarker(pct)"></div>
-                            </template>
-                        </div>
+                        <!-- Controls overlay (always visible when not fullscreen; auto-hides in fullscreen) -->
+                        <div class="transition-opacity duration-300"
+                            :class="previewIsFullscreen ? (previewControlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none') : 'opacity-100'"
+                            :style="previewIsFullscreen ? 'position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,0.97) 40%);padding:1.25rem 1rem 0.75rem;cursor:default' : 'background:rgba(0,0,0,0.92);padding:0.75rem'">
 
-                        <div class="flex items-center gap-3 text-xs">
-                            <button @click="previewTogglePlay()" class="text-parchment-700 hover:text-parchment-900 transition-colors">
-                                <svg x-show="!previewIsPlaying" class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
-                                </svg>
-                                <svg x-show="previewIsPlaying" class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
-                                </svg>
-                            </button>
-
-                            <span class="font-mono text-parchment-400">
-                                <span x-text="previewFormatTime(previewCurrentTime)"></span>
-                                <span class="text-ink-400"> / </span>
-                                <span x-text="previewFormatTime(previewDuration)"></span>
-                            </span>
-
-                            <div class="flex-1"></div>
-
-                            <!-- Clip controls -->
-                            <div class="flex items-center gap-1.5 border-l border-ink-500 pl-3">
-                                <button @click="clipSetIn()" class="quick-btn">
-                                    In
-                                    <span x-show="clipInSecs !== null" class="text-gold-500 ml-1 font-mono"
-                                        x-text="previewFormatTime(clipInSecs)"></span>
-                                </button>
-                                <button @click="clipSetOut()" class="quick-btn">
-                                    Out
-                                    <span x-show="clipOutSecs !== null" class="text-gold-500 ml-1 font-mono"
-                                        x-text="previewFormatTime(clipOutSecs)"></span>
-                                </button>
-                                <button @click="clipExport()" :disabled="!canExportClip || clipBusy"
-                                    class="quick-btn"
-                                    :class="canExportClip && !clipBusy ? 'border-gold-500 text-gold-500' : ''">
-                                    <span x-text="clipBusy ? 'Exporting…' : 'Export'"></span>
-                                </button>
-                                <button @click="clipClear()" x-show="clipInSecs !== null || clipOutSecs !== null"
-                                    class="text-parchment-300 hover:text-parchment-700 transition-colors px-1 text-sm">✕</button>
+                            <!-- Timeline -->
+                            <div class="relative h-2 bg-white/20 rounded cursor-pointer mb-3"
+                                x-ref="previewTimeline"
+                                @click="previewSeekTo($event)"
+                                @mousemove="previewHoverSeek($event)"
+                                @mouseleave="previewSeekPreviewTime = null">
+                                <div class="h-full bg-amber-400 rounded transition-all"
+                                    :style="'width:' + previewPlayedPercent + '%;'"></div>
+                                <template x-for="(pct, i) in previewDeathMarkerPositions" :key="i">
+                                    <div class="absolute top-0 bottom-0 w-0.5 bg-red-500"
+                                        :style="'left:' + pct + '%;'"
+                                        @click.stop="previewSeekToMarker(pct)"></div>
+                                </template>
+                                <template x-for="(pct, i) in previewMomentPositions" :key="'m'+i">
+                                    <div class="absolute -top-1 -bottom-1 w-0.5 bg-amber-400"
+                                        :style="'left:' + pct + '%;'"
+                                        @click.stop="previewSeekToMarker(pct)"></div>
+                                </template>
+                                <!-- Seek preview tooltip -->
+                                <div x-show="previewSeekPreviewTime !== null"
+                                    class="absolute -top-7 text-[10px] font-mono bg-black/80 text-white px-1.5 py-0.5 rounded pointer-events-none -translate-x-1/2"
+                                    :style="'left:' + previewSeekPreviewPercent + '%;'"
+                                    x-text="previewFormatTime(previewSeekPreviewTime)"></div>
                             </div>
 
-                            <span x-show="previewDeathMarkerPositions.length > 0"
-                                class="px-2 py-0.5 rounded-full text-[10px]"
-                                style="background: rgba(220,80,80,0.2); color:#e07070; border:1px solid rgba(220,80,80,0.4);">
-                                <span x-text="previewDeathMarkerPositions.length"></span> deaths
-                            </span>
+                            <div class="flex items-center gap-3 text-xs">
+                                <!-- Play/pause -->
+                                <button @click="previewTogglePlay()" class="text-white/80 hover:text-white transition-colors">
+                                    <svg x-show="!previewIsPlaying" class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
+                                    </svg>
+                                    <svg x-show="previewIsPlaying" class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
+                                    </svg>
+                                </button>
 
-                            <button @click="$refs.previewPlayer.requestFullscreen()"
-                                class="text-parchment-700 hover:text-parchment-900 transition-colors">
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-                                </svg>
-                            </button>
+                                <!-- Time -->
+                                <span class="font-mono text-white/70">
+                                    <span x-text="previewFormatTime(previewCurrentTime)"></span>
+                                    <span class="text-white/30"> / </span>
+                                    <span x-text="previewFormatTime(previewDuration)"></span>
+                                </span>
+
+                                <!-- Volume -->
+                                <div class="flex items-center gap-1.5">
+                                    <button @click="previewIsMuted = !previewIsMuted" class="text-white/60 hover:text-white transition-colors shrink-0">
+                                        <svg x-show="!previewIsMuted && previewVolume > 0" class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fill-rule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM14.657 2.929a1 1 0 011.414 0A9.972 9.972 0 0119 10a9.972 9.972 0 01-2.929 7.071 1 1 0 01-1.414-1.414A7.971 7.971 0 0017 10c0-2.21-.894-4.208-2.343-5.657a1 1 0 010-1.414zm-2.829 2.828a1 1 0 011.415 0A5.983 5.983 0 0115 10a5.984 5.984 0 01-1.757 4.243 1 1 0 01-1.415-1.415A3.984 3.984 0 0013 10a3.983 3.983 0 00-1.172-2.828 1 1 0 010-1.415z" clip-rule="evenodd"/>
+                                        </svg>
+                                        <svg x-show="previewIsMuted || previewVolume === 0" class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fill-rule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM12.293 7.293a1 1 0 011.414 0L15 8.586l1.293-1.293a1 1 0 111.414 1.414L16.414 10l1.293 1.293a1 1 0 01-1.414 1.414L15 11.414l-1.293 1.293a1 1 0 01-1.414-1.414L13.586 10l-1.293-1.293a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                                        </svg>
+                                    </button>
+                                    <input type="range" min="0" max="1" step="0.05"
+                                        x-model.number="previewVolume"
+                                        @input="previewIsMuted = (previewVolume === 0)"
+                                        class="w-20 h-1 appearance-none rounded-full cursor-pointer"
+                                        style="accent-color:#f59e0b;">
+                                </div>
+
+                                <!-- Playback speed -->
+                                <div class="flex items-center gap-1">
+                                    <template x-for="spd in [0.5, 1, 1.5, 2]" :key="spd">
+                                        <button @click="previewSetSpeed(spd)"
+                                            class="px-1.5 py-0.5 rounded text-[10px] font-mono transition-colors"
+                                            :class="previewSpeed === spd
+                                                ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
+                                                : 'text-white/40 hover:text-white/70'"
+                                            x-text="spd + '×'"></button>
+                                    </template>
+                                </div>
+
+                                <div class="flex-1"></div>
+
+                                <!-- Clip controls -->
+                                <div class="flex items-center gap-1.5 border-l border-white/20 pl-3">
+                                    <button @click="clipSetIn()" class="quick-btn">
+                                        In
+                                        <span x-show="clipInSecs !== null" class="text-gold-500 ml-1 font-mono"
+                                            x-text="previewFormatTime(clipInSecs)"></span>
+                                    </button>
+                                    <button @click="clipSetOut()" class="quick-btn">
+                                        Out
+                                        <span x-show="clipOutSecs !== null" class="text-gold-500 ml-1 font-mono"
+                                            x-text="previewFormatTime(clipOutSecs)"></span>
+                                    </button>
+                                    <button @click="clipExport()" :disabled="!canExportClip || clipBusy"
+                                        class="quick-btn"
+                                        :class="canExportClip && !clipBusy ? 'border-gold-500 text-gold-500' : ''">
+                                        <span x-text="clipBusy ? 'Exporting…' : 'Export'"></span>
+                                    </button>
+                                    <button @click="clipClear()" x-show="clipInSecs !== null || clipOutSecs !== null"
+                                        class="text-white/40 hover:text-white transition-colors px-1 text-sm">✕</button>
+                                </div>
+
+                                <span x-show="previewDeathMarkerPositions.length > 0"
+                                    class="px-2 py-0.5 rounded-full text-[10px]"
+                                    style="background:rgba(220,80,80,0.2);color:#e07070;border:1px solid rgba(220,80,80,0.4);">
+                                    <span x-text="previewDeathMarkerPositions.length"></span> deaths
+                                </span>
+
+                                <!-- Fullscreen -->
+                                <button @click="previewToggleFullscreen()" class="text-white/60 hover:text-white transition-colors">
+                                    <svg x-show="!previewIsFullscreen" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                                    </svg>
+                                    <svg x-show="previewIsFullscreen" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M9 9V4m0 0H4m5 0L3 10m12-6h5m0 0v5m0-5l-6 6M9 20v-5m0 5H4m5 0l-6-6m17 6h-5m5 0v-5m0 5l-6-6" />
+                                    </svg>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -771,6 +834,8 @@
                     log_monitor: {}
                 },
                 events: [],
+                toasts: [],
+                _toastSeq: 0,
                 recordings: [],
                 recordingsMeta: {},   // name → metadata cache
 
@@ -790,6 +855,11 @@
                 previewMetadata: null,
                 previewIsPlaying: false,
                 previewIsMuted: false,
+                previewVolume: 1,
+                previewIsFullscreen: false,
+                previewControlsVisible: true,
+                previewControlsHideTimer: null,
+                previewSpeed: 1,
                 previewCurrentTime: 0,
                 previewDuration: 0,
                 previewPlayedPercent: 0,
@@ -1119,9 +1189,20 @@
                     this.socket.on('clip_complete', (data) => {
                         this.clipBusy = false;
                         if (data.error) {
-                            alert('Clip export failed: ' + data.error);
+                            this.toast('Clip export failed: ' + data.error, 'error');
+                        } else {
+                            this.toast('Clip exported successfully', 'success');
                         }
                     });
+                },
+
+                // ── Toast notifications ──────────────────────────────
+                toast(message, type = 'success', duration = 4000) {
+                    const id = ++this._toastSeq;
+                    this.toasts.push({ id, message, type });
+                    setTimeout(() => {
+                        this.toasts = this.toasts.filter(t => t.id !== id);
+                    }, duration);
                 },
 
                 // ── Format helpers ───────────────────────────────────
@@ -1187,7 +1268,7 @@
                         const res = await fetch(url, { method: 'POST' });
                         const data = await res.json();
                         if (!res.ok) {
-                            alert('Upload failed: ' + (data.error || 'unknown'));
+                            this.toast('Upload failed: ' + (data.error || 'unknown'), 'error');
                         }
                     } catch (e) {
                         console.error('Upload failed:', e);
@@ -1210,6 +1291,7 @@
                     this.clipInSecs = null;
                     this.clipOutSecs = null;
                     this.clipBusy = false;
+                    this.previewSpeed = 1;
                     try {
                         const encodedName = rec.name.split('/').map(encodeURIComponent).join('/');
                         const res = await fetch('/api/recordings/' + encodedName + '/metadata');
@@ -1271,6 +1353,55 @@
                     const v = this.$refs.previewPlayer;
                     if (!v) return;
                     v.paused ? v.play() : v.pause();
+                },
+
+                previewHandleKey(e) {
+                    // Only act when the preview modal is open and focus isn't in an input
+                    if (!this.previewRecording) return;
+                    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+                    if (e.key === ' ' || e.key === 'k') {
+                        e.preventDefault();
+                        this.previewTogglePlay();
+                    } else if (e.key === 'ArrowRight' || e.key === 'l' || e.key === 'L') {
+                        e.preventDefault();
+                        const v = this.$refs.previewPlayer;
+                        if (v) v.currentTime = Math.min(v.duration, v.currentTime + 10);
+                    } else if (e.key === 'ArrowLeft' || e.key === 'j' || e.key === 'J') {
+                        e.preventDefault();
+                        const v = this.$refs.previewPlayer;
+                        if (v) v.currentTime = Math.max(0, v.currentTime - 10);
+                    } else if (e.key === 'f' || e.key === 'F') {
+                        e.preventDefault();
+                        this.previewToggleFullscreen();
+                    } else if (e.key === 'm' || e.key === 'M') {
+                        e.preventDefault();
+                        this.previewIsMuted = !this.previewIsMuted;
+                    } else if (e.key === 'Escape' && this.previewIsFullscreen) {
+                        document.exitFullscreen();
+                    }
+                },
+
+                previewToggleFullscreen() {
+                    const wrapper = this.$refs.previewWrapper;
+                    if (!wrapper) return;
+                    if (!document.fullscreenElement) {
+                        wrapper.requestFullscreen();
+                    } else {
+                        document.exitFullscreen();
+                    }
+                },
+
+                previewSetSpeed(spd) {
+                    this.previewSpeed = spd;
+                    if (this.$refs.previewPlayer) this.$refs.previewPlayer.playbackRate = spd;
+                },
+                    this.previewControlsVisible = true;
+                    clearTimeout(this.previewControlsHideTimer);
+                    if (this.previewIsFullscreen) {
+                        this.previewControlsHideTimer = setTimeout(() => {
+                            this.previewControlsVisible = false;
+                        }, 2500);
+                    }
                 },
 
                 previewSeekTo(event) {
@@ -1354,7 +1485,7 @@
                         const data = await res.json();
                         if (!res.ok) {
                             console.error('Clip export failed:', data.error);
-                            alert('Clip export failed: ' + (data.error || 'unknown error'));
+                            this.toast('Clip export failed: ' + (data.error || 'unknown error'), 'error');
                             this.clipBusy = false;
                         }
                     } catch (e) {

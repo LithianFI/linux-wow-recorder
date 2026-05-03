@@ -250,28 +250,32 @@ class CombatParser:
     def _parse_combatant_info(self, line: str):
         """Extract specID from the player's COMBATANT_INFO line.
 
-        COMBATANT_INFO fields (comma-separated, after the event type):
-          [0] COMBATANT_INFO
-          [1] playerGUID
-          [2] faction
-          [3-24] stats (strength, agility, stamina, ...)
-          [24] specID   ← index 24 from the start of the data segment
+        COMBATANT_INFO fields (comma-separated):
+          [0]    COMBATANT_INFO
+          [1]    playerGUID
+          [2-21] stats (Strength, Agility, Stamina, Intelligence,
+                        Dodge, Parry, Block, CritMelee, CritRanged, CritSpell,
+                        Speed, Lifesteal, HasteMelee, HasteRanged, HasteSpell,
+                        Avoidance, Mastery, VersatilityDamageDone,
+                        VersatilityHealingDone, VersatilityDamageTaken)
+          [22]   Armor
+          [23]   CurrentSpecID
         """
         try:
             ts_split = line.split('  ', 1)
             if len(ts_split) < 2:
                 return
 
-            # Split only up to field 26 to avoid parsing the huge talent/gear arrays
-            parts = ts_split[1].split(',', 26)
-            if len(parts) < 25:
+            # Split only up to field 25 to avoid parsing the huge talent/gear arrays
+            parts = ts_split[1].split(',', 25)
+            if len(parts) < 24:
                 return
 
             guid = parts[1].strip()
             if guid != self.player_guid:
                 return  # Not the local player's COMBATANT_INFO
 
-            spec_id = int(parts[24].strip())
+            spec_id = int(parts[23].strip())
             if spec_id > 0:
                 self.player_spec_id = spec_id
                 print(f"{LOG_PREFIXES['PARSER']} Player specID: {spec_id}")

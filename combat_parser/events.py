@@ -232,7 +232,7 @@ class CombatEvent:
         
         if self.is_dungeon_end and len(self.fields) >= 5:
             try:
-                is_success = self.fields[4] == "1"
+                is_success = self.fields[2] == "1"
                 dungeon_name = self.fields[2] if len(self.fields) > 2 else None
             except (ValueError, IndexError):
                 pass
